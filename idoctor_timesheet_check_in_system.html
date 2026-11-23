@@ -1,0 +1,2958 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>iDOCTOR - Hệ Thống Chấm Công Trực Tuyến</title>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Font Awesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <!-- Google Fonts: Inter, Montserrat & Playfair Display -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Montserrat:wght@200;300;400;500;600&family=Playfair+Display:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <!-- SheetJS for Excel (.xlsx) Export -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <!-- html2pdf.js for direct PDF Download -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+
+    /* Bảng chấm công chuẩn mẫu CC T10.xlsx */
+    .timesheet-wrap {
+      font-family: 'Times New Roman', Times, serif;
+      color: #000000;
+    }
+    .sheet-table {
+      border-collapse: collapse;
+      width: 100%;
+    }
+    .sheet-table th,
+    .sheet-table td {
+      border: 1px solid #000000;
+      padding: 2px 3px;
+      font-size: 11px;
+      text-align: center;
+      line-height: 1.25;
+      white-space: nowrap;
+    }
+    .summary-table {
+      border-collapse: collapse;
+      width: 100%;
+    }
+    .summary-table td {
+      border: 1px solid #000000;
+      padding: 2px 6px;
+      font-size: 11.5px;
+      line-height: 1.3;
+    }
+    .summary-table td.no-border {
+      border-top: none;
+      border-bottom: none;
+    }
+    .bg-yellow-exact {
+      background-color: #FFFF00 !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    .bg-cyan-exact {
+      background-color: #00FFFF !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+
+    /* Chữ ký canvas */
+    .sig-pad-wrapper {
+      touch-action: none;
+    }
+
+    /* Toast animation */
+    @keyframes slideInRight {
+      from { transform: translateX(110%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+    .toast-enter {
+      animation: slideInRight 0.25s ease-out forwards;
+    }
+
+    /* Print / PDF Styles: A4 vừa khít 1 trang */
+    @media print {
+      @page {
+        size: A4 portrait;
+        margin: 6mm 7mm;
+      }
+      html, body {
+        background: #ffffff !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 100% !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+      .no-print {
+        display: none !important;
+      }
+      #printableArea {
+        box-shadow: none !important;
+        border: none !important;
+        border-radius: 0 !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        overflow: visible !important;
+      }
+      .sheet-table th,
+      .sheet-table td {
+        font-size: 9.2px !important;
+        padding: 1.5px 2px !important;
+      }
+      .summary-table td {
+        font-size: 9.5px !important;
+        padding: 1.5px 4px !important;
+      }
+      .print-input-clean {
+        border: none !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+      }
+      .sig-pad-box {
+        border: none !important;
+        background: transparent !important;
+      }
+    }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800 min-h-screen flex flex-col">
+
+  <!-- ================= TOAST CONTAINER ================= -->
+  <div id="toastContainer" class="fixed top-4 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none no-print"></div>
+
+  <!-- ================= DELETE CONFIRMATION MODAL ================= -->
+  <div id="deleteModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 no-print" role="dialog" aria-modal="true" aria-labelledby="deleteModalTitle">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full p-5 sm:p-6 space-y-4">
+      <div class="flex items-start gap-3.5">
+        <div class="w-11 h-11 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center flex-shrink-0">
+          <i class="fa-solid fa-triangle-exclamation text-lg"></i>
+        </div>
+        <div class="space-y-1">
+          <h3 id="deleteModalTitle" class="text-base font-bold text-slate-900">Xác nhận xóa nhân sự</h3>
+          <p class="text-xs text-slate-600 leading-relaxed">
+            Bạn có chắc chắn muốn xóa nhân sự <strong id="deleteModalEmpName" class="text-slate-900">---</strong>?
+            Toàn bộ lịch sử chấm công của nhân sự này cũng sẽ bị xóa vĩnh viễn và cập nhật ngay cho tất cả mọi người.
+          </p>
+        </div>
+      </div>
+      <div class="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+        <button type="button" onclick="closeDeleteModal()" class="px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition">
+          Hủy
+        </button>
+        <button type="button" id="btnConfirmDelete" onclick="confirmDeleteEmployee()" class="px-4 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-lg transition flex items-center gap-1.5 shadow-sm">
+          <i class="fa-solid fa-trash-can"></i>
+          <span>Xác nhận xóa</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= MANAGER PIN LOGIN MODAL ================= -->
+  <div id="pinModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 no-print" role="dialog" aria-modal="true" aria-labelledby="pinModalTitle">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-sm w-full p-5 sm:p-6 space-y-4">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2.5">
+          <div class="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center flex-shrink-0">
+            <i class="fa-solid fa-shield-halved text-base"></i>
+          </div>
+          <div>
+            <h3 id="pinModalTitle" class="text-sm font-bold text-slate-900">Đăng nhập Trang Quản Lý</h3>
+            <p class="text-[11px] text-slate-500">Nhập mã PIN để theo dõi &amp; xuất bảng công</p>
+          </div>
+        </div>
+        <button type="button" onclick="closePinModal()" class="text-slate-400 hover:text-slate-600 p-1">
+          <i class="fa-solid fa-xmark text-base"></i>
+        </button>
+      </div>
+
+      <form onsubmit="handlePinSubmit(event)" class="space-y-3">
+        <div>
+          <label for="pinInput" class="block text-xs font-semibold text-slate-700 mb-1">Mã PIN Quản lý</label>
+          <input type="password" id="pinInput" inputmode="numeric" maxlength="10" required placeholder="Nhập mã PIN..." class="w-full text-center tracking-[0.35em] text-lg font-bold px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+          <p id="pinDefaultHint" class="text-[11px] text-slate-500 mt-1.5 text-center">Mã PIN mặc định ban đầu: <strong class="text-indigo-600 font-mono">1234</strong></p>
+          <p id="pinError" class="hidden text-xs text-rose-600 font-semibold mt-1.5 text-center"></p>
+        </div>
+        <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+          <button type="button" onclick="closePinModal()" class="px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition">
+            Hủy
+          </button>
+          <button type="submit" class="px-4 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition flex items-center gap-1.5 shadow-sm">
+            <i class="fa-solid fa-unlock"></i>
+            <span>Mở Trang Quản Lý</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ================= CHANGE MANAGER PIN MODAL ================= -->
+  <div id="changePinModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 no-print" role="dialog" aria-modal="true" aria-labelledby="changePinModalTitle">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-sm w-full p-5 sm:p-6 space-y-4">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2.5">
+          <div class="w-10 h-10 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center flex-shrink-0">
+            <i class="fa-solid fa-key text-base"></i>
+          </div>
+          <div>
+            <h3 id="changePinModalTitle" class="text-sm font-bold text-slate-900">Đổi mã PIN Quản lý</h3>
+            <p class="text-[11px] text-slate-500">Bảo vệ trang Quản lý khi gửi link cho nhân viên</p>
+          </div>
+        </div>
+        <button type="button" onclick="closeChangePinModal()" class="text-slate-400 hover:text-slate-600 p-1">
+          <i class="fa-solid fa-xmark text-base"></i>
+        </button>
+      </div>
+
+      <form onsubmit="handleChangePinSubmit(event)" class="space-y-3">
+        <div>
+          <label for="oldPinInput" class="block text-xs font-semibold text-slate-700 mb-1">Mã PIN hiện tại</label>
+          <input type="password" id="oldPinInput" inputmode="numeric" maxlength="10" required placeholder="Nhập mã PIN cũ..." class="w-full text-sm px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+        </div>
+        <div>
+          <label for="newPinInput" class="block text-xs font-semibold text-slate-700 mb-1">Mã PIN mới (từ 4 đến 10 ký tự)</label>
+          <input type="password" id="newPinInput" inputmode="numeric" minlength="4" maxlength="10" required placeholder="Nhập mã PIN mới..." class="w-full text-sm px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+        </div>
+        <p id="changePinError" class="hidden text-xs text-rose-600 font-semibold"></p>
+        <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+          <button type="button" onclick="closeChangePinModal()" class="px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition">
+            Hủy
+          </button>
+          <button type="submit" id="btnSaveNewPin" class="px-4 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition flex items-center gap-1.5 shadow-sm">
+            <i class="fa-solid fa-floppy-disk"></i>
+            <span>Lưu mã PIN</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ================= STANDALONE DEPLOY MODAL (GOOGLE SHEETS) ================= -->
+  <div id="deployModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 no-print" role="dialog" aria-modal="true" aria-labelledby="deployModalTitle">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+      <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3 bg-slate-50">
+        <div class="flex items-center gap-2.5">
+          <div class="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center flex-shrink-0">
+            <i class="fa-solid fa-rocket text-base"></i>
+          </div>
+          <div>
+            <h3 id="deployModalTitle" class="text-sm sm:text-base font-bold text-slate-900">Xuất Web Chạy Độc Lập (Không cần Gmail / Gemini)</h3>
+            <p class="text-[11px] text-slate-500">Lưu dữ liệu trực tiếp vào Google Sheets của bạn &amp; mở được trên mọi điện thoại</p>
+          </div>
+        </div>
+        <button type="button" onclick="closeDeployModal()" class="text-slate-400 hover:text-slate-600 p-1">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <div class="p-5 overflow-y-auto space-y-4 text-xs text-slate-700">
+        <!-- Bước 1 -->
+        <div class="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div class="font-bold text-slate-900 flex items-center gap-2">
+              <span class="w-5 h-5 rounded-full bg-emerald-600 text-white text-[11px] flex items-center justify-center">1</span>
+              Tạo Google Sheets &amp; Dán mã kết nối (Apps Script)
+            </div>
+            <button type="button" onclick="copyAppsScriptCode()" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-900 text-white text-[11px] font-semibold transition flex items-center gap-1.5 shadow-sm">
+              <i class="fa-regular fa-copy"></i>
+              <span>Sao chép mã Apps Script</span>
+            </button>
+          </div>
+          <ol class="list-decimal list-inside space-y-1 text-[11px] text-slate-600 leading-relaxed">
+            <li>Mở <strong>sheets.new</strong> để tạo 1 file Google Sheets trống mới cho công ty.</li>
+            <li>Trên thanh menu chọn <strong>Tiện ích mở rộng (Extensions) &rarr; Apps Script</strong>.</li>
+            <li>Xóa toàn bộ chữ mặc định trong khung code, bấm nút <strong>Sao chép mã Apps Script</strong> ở trên rồi dán vào và bấm <strong>Lưu (Ctrl+S)</strong>.</li>
+          </ol>
+        </div>
+
+        <!-- Bước 2 -->
+        <div class="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-1.5">
+          <div class="font-bold text-slate-900 flex items-center gap-2">
+            <span class="w-5 h-5 rounded-full bg-emerald-600 text-white text-[11px] flex items-center justify-center">2</span>
+            Xuất bản đường dẫn kết nối (Web App URL)
+          </div>
+          <ol class="list-decimal list-inside space-y-1 text-[11px] text-slate-600 leading-relaxed">
+            <li>Ở góc trên phải Apps Script, bấm <strong>Triển khai (Deploy) &rarr; Tùy chọn triển khai mới (New deployment)</strong>.</li>
+            <li>Bấm biểu tượng bánh răng chọn <strong>Ứng dụng web (Web app)</strong>.</li>
+            <li>Mục <em>Thực thi dưới dạng (Execute as)</em> chọn <strong>Tôi (Me)</strong>; mục <em>Người có quyền truy cập (Who has access)</em> chọn <strong>Bất kỳ ai (Anyone)</strong>.</li>
+            <li>Bấm <strong>Triển khai</strong>, cấp quyền cho tài khoản Google của bạn, rồi copy đường dẫn <strong>URL ứng dụng web</strong> (dạng <code>https://script.google.com/macros/s/.../exec</code>).</li>
+          </ol>
+        </div>
+
+        <!-- Bước 3 -->
+        <div class="bg-blue-50/70 border border-blue-200 rounded-xl p-3.5 space-y-2.5">
+          <div class="font-bold text-slate-900 flex items-center gap-2">
+            <span class="w-5 h-5 rounded-full bg-blue-600 text-white text-[11px] flex items-center justify-center">3</span>
+            Dán URL vào đây để tải file <code class="font-mono text-blue-700">index.html</code> độc lập
+          </div>
+          <div class="space-y-1.5">
+            <label for="gsheetUrlInput" class="block text-[11px] font-semibold text-slate-700">URL Ứng dụng web Google Apps Script:</label>
+            <input type="url" id="gsheetUrlInput" placeholder="https://script.google.com/macros/s/.../exec" class="w-full text-xs px-3 py-2.5 bg-white border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none font-mono">
+          </div>
+          <div class="flex flex-wrap items-center gap-2 pt-1">
+            <button type="button" id="btnDownloadStandalone" onclick="downloadConfiguredHtml()" class="px-4 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-sm">
+              <i class="fa-solid fa-download"></i>
+              <span>Tải file index.html đã gắn sẵn Google Sheets</span>
+            </button>
+          </div>
+          <p class="text-[11px] text-slate-600 leading-relaxed">
+            <strong>Bước cuối đưa lên mạng (miễn phí):</strong> Vào <strong>app.netlify.com/drop</strong> (hoặc GitHub Pages / Google Sites), kéo thả file <code>index.html</code> vừa tải về là có ngay link web công khai. Nhân viên mở trên bất kỳ điện thoại nào cũng chấm công được ngay mà <strong>không cần đăng nhập Gmail</strong>!
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= HEADER ================= -->
+  <header id="adminHeader" class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm no-print">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2.5 flex flex-wrap items-center justify-between gap-3">
+      <!-- Logo iDOCTOR chuẩn DESIGN GUIDELINE -->
+      <div class="flex items-center gap-3">
+        <div class="flex items-center gap-2.5">
+          <!-- Inline SVG Logo iDOCTOR (Navbar) -->
+          <svg class="w-12 h-12 flex-shrink-0" viewBox="0 0 220 220" xmlns="http://www.w3.org/2000/svg" aria-label="iDOCTOR Logo">
+            <defs>
+              <path id="navTopArc" d="M 32,115 A 78,78 0 1,1 188,115" fill="none"/>
+              <path id="navBotArc" d="M 36,125 A 79,79 0 0,0 184,125" fill="none"/>
+            </defs>
+            <circle cx="110" cy="110" r="95" fill="none" stroke="#777777" stroke-width="2.4"/>
+            <circle cx="110" cy="110" r="65" fill="none" stroke="#777777" stroke-width="2.4"/>
+            <path d="M 94,69 H 126 V 94 H 151 V 126 H 126 V 151 H 94 V 126 H 69 V 94 H 94 Z" fill="#777777"/>
+            <text fill="#777777" font-family="'Playfair Display', Georgia, serif" font-size="18.5" letter-spacing="2.2">
+              <textPath href="#navTopArc" startOffset="50%" text-anchor="middle">C&#183;O&#183;S&#183;M&#183;E&#183;C&#183;E&#183;U&#183;T&#183;I&#183;C&#183;A&#183;L</textPath>
+            </text>
+            <text fill="#777777" font-family="'Playfair Display', Georgia, serif" font-size="19.5" letter-spacing="5">
+              <textPath href="#navBotArc" startOffset="50%" text-anchor="middle">iDOCTOR</textPath>
+            </text>
+            <circle cx="195" cy="30" r="13" fill="none" stroke="#777777" stroke-width="2.2"/>
+            <text x="195" y="36" fill="#777777" font-family="Arial, sans-serif" font-size="16" font-weight="600" text-anchor="middle">R</text>
+          </svg>
+          <div>
+            <div style="font-family: 'Montserrat', sans-serif; color: #777777;" class="text-2xl font-light tracking-[0.14em] leading-none">iDOCTOR</div>
+            <div class="text-[11px] text-slate-500 font-medium mt-0.5">Cổng Quản Lý &amp; Theo Dõi Chấm Công</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sync Status & Action Buttons -->
+      <div class="flex flex-wrap items-center gap-2">
+        <div id="syncBadge" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600 border border-slate-200">
+          <span id="syncDot" class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+          <span id="syncText">Đang kết nối...</span>
+        </div>
+
+        <button type="button" onclick="openChangePinModal()" class="text-xs bg-amber-50 hover:bg-amber-100 text-amber-800 px-3 py-2 rounded-lg font-semibold border border-amber-200 transition flex items-center gap-1.5 shadow-sm">
+          <i class="fa-solid fa-key"></i>
+          <span>Đổi PIN</span>
+        </button>
+
+        <button type="button" onclick="openDeployModal()" class="text-xs bg-teal-50 hover:bg-teal-100 text-teal-800 px-3 py-2 rounded-lg font-semibold border border-teal-200 transition flex items-center gap-1.5 shadow-sm">
+          <i class="fa-solid fa-rocket"></i>
+          <span>Xuất độc lập</span>
+        </button>
+
+        <button type="button" onclick="togglePreviewEmployeeMode(true)" class="text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-3 py-2 rounded-lg font-semibold border border-indigo-200 transition flex items-center gap-1.5 shadow-sm">
+          <i class="fa-solid fa-mobile-screen-button"></i>
+          <span>Sang trang Chấm công</span>
+        </button>
+
+        <button type="button" onclick="loadOctoberSampleData()" class="text-xs bg-white hover:bg-slate-50 text-slate-700 px-3 py-2 rounded-lg font-medium border border-slate-300 transition flex items-center gap-1.5 shadow-sm">
+          <i class="fa-solid fa-database text-amber-500"></i>
+          <span>Nạp mẫu T10</span>
+        </button>
+
+        <button type="button" onclick="exportToExcel()" class="text-xs bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg font-medium transition flex items-center gap-1.5 shadow-sm">
+          <i class="fa-solid fa-file-excel"></i>
+          <span>Xuất Excel</span>
+        </button>
+
+        <button type="button" onclick="downloadPDF()" id="btnDownloadPdf" class="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg font-medium transition flex items-center gap-1.5 shadow-sm">
+          <i class="fa-solid fa-file-pdf"></i>
+          <span>Xuất PDF</span>
+        </button>
+
+        <button type="button" onclick="printTimesheet()" class="text-xs bg-slate-800 hover:bg-slate-900 text-white px-3 py-2 rounded-lg font-medium transition flex items-center gap-1.5 shadow-sm">
+          <i class="fa-solid fa-print"></i>
+          <span>In A4</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ================= VIEW 1: CỔNG QUẢN LÝ / THEO DÕI CHẤM CÔNG (LINK TỔNG) ================= -->
+  <main id="adminView" class="max-w-7xl mx-auto w-full p-4 sm:p-6 space-y-6 flex-1">
+
+    <!-- Thanh hướng dẫn chia sẻ Link cho Nhân viên -->
+    <section class="bg-gradient-to-r from-indigo-50 via-white to-blue-50 rounded-2xl border border-indigo-200/80 p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-sm no-print">
+      <div class="flex items-start gap-3">
+        <div class="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center flex-shrink-0 shadow-sm">
+          <i class="fa-solid fa-tower-broadcast text-base"></i>
+        </div>
+        <div class="space-y-1">
+          <div class="text-sm font-bold text-slate-900">Cách gửi Link Chấm Công cho Nhân viên</div>
+          <p class="text-xs text-slate-600 leading-relaxed">
+            Bất kỳ ai mở link chia sẻ sẽ vào <strong>thẳng màn hình Chấm Công Nhân Viên</strong> (không thấy trang Quản lý). Riêng bạn bấm nút <strong>Quản lý</strong> ở góc trên và nhập mã PIN để vào theo dõi &amp; xuất file.
+          </p>
+          <!-- Hiện khi đang ở khung Preview nội bộ hoặc nhúng Google Sites (iframe) -->
+          <div id="sandboxNotice" class="hidden mt-1.5 inline-flex items-start gap-1.5 text-[11px] font-semibold text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-1.5 rounded-lg">
+            <i class="fa-solid fa-circle-info text-amber-600 mt-0.5"></i>
+            <span id="sandboxNoticeText">Đang ở khung Xem thử (Preview): Hãy bấm nút <strong>Chia sẻ (Share)</strong> ở góc trên cùng của trình duyệt để tạo link công khai gửi nhân viên!</span>
+          </div>
+          <!-- Hiện khi đã mở bằng link công khai thực tế -->
+          <div id="realLinkPreviewWrap" class="mt-1.5 flex flex-wrap items-center gap-2">
+            <code id="checkinLinkPreview" class="text-[11px] bg-white border border-indigo-200 text-indigo-700 px-2.5 py-1 rounded-lg font-mono break-all">...</code>
+          </div>
+        </div>
+      </div>
+      <div id="realLinkControls" class="flex flex-wrap items-center gap-2 flex-shrink-0">
+        <button type="button" onclick="copyEmployeeCheckinLink()" class="px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition flex items-center gap-1.5 shadow-sm">
+          <i class="fa-regular fa-copy"></i>
+          <span>Sao chép Link Chấm Công</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- ================= KHỐI 1: QUẢN LÝ NHÂN SỰ & THEO DÕI HÔM NAY ================= -->
+    <section class="grid grid-cols-1 lg:grid-cols-12 gap-5 no-print">
+
+      <!-- Cột trái (5/12): Đăng ký & Danh sách nhân sự -->
+      <div class="lg:col-span-5 bg-white rounded-2xl shadow-sm border border-slate-200 p-5 flex flex-col gap-4">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+          <h2 class="text-sm font-bold text-slate-800 uppercase tracking-wide flex items-center gap-2">
+            <i class="fa-solid fa-users text-blue-600"></i>
+            Quản lý danh sách nhân sự
+          </h2>
+          <span id="empCountBadge" class="text-xs font-semibold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">0 nhân sự</span>
+        </div>
+
+        <!-- Form thêm nhân sự mới -->
+        <form id="addEmployeeForm" onsubmit="handleAddEmployee(event)" class="bg-slate-50 rounded-xl p-3.5 border border-slate-200 space-y-3">
+          <div class="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+            <i class="fa-solid fa-user-plus text-emerald-600"></i>
+            Thêm nhân sự mới (tự đồng bộ sang Link Chấm công)
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <div class="sm:col-span-2">
+              <label class="block text-[11px] font-semibold text-slate-600 mb-1">Họ và tên <span class="text-rose-500">*</span></label>
+              <input type="text" id="inputEmpName" required placeholder="VD: Nguyễn Văn An" class="w-full text-sm px-3 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none">
+            </div>
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-600 mb-1">Phòng ban <span class="text-rose-500">*</span></label>
+              <input type="text" id="inputEmpDept" required placeholder="VD: Kinh Doanh, Marketing..." class="w-full text-sm px-3 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none">
+            </div>
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-600 mb-1">Chức danh <span class="text-slate-400 font-normal">(tùy chọn)</span></label>
+              <input type="text" id="inputEmpTitle" placeholder="VD: Chuyên viên" class="w-full text-sm px-3 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none">
+            </div>
+            <div class="sm:col-span-2">
+              <label class="block text-[11px] font-semibold text-slate-600 mb-1">Mã nhân viên <span class="text-slate-400 font-normal">(để trống sẽ tự sinh 5 số: 00001...)</span></label>
+              <input type="text" id="inputEmpCode" placeholder="VD: 00001" maxlength="12" class="w-full text-sm px-3 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none">
+            </div>
+          </div>
+          <button type="submit" id="btnAddEmployee" class="w-full py-2.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold rounded-lg transition flex items-center justify-center gap-1.5 shadow-sm">
+            <i class="fa-solid fa-plus"></i>
+            <span>Thêm nhân sự vào hệ thống</span>
+          </button>
+        </form>
+
+        <!-- Tìm kiếm & Danh sách nhân sự -->
+        <div class="flex flex-col flex-1 min-h-0">
+          <div class="relative mb-2.5">
+            <i class="fa-solid fa-magnifying-glass text-slate-400 text-xs absolute left-3 top-1/2 -translate-y-1/2"></i>
+            <input type="text" id="searchEmpInput" oninput="renderEmployeeList()" placeholder="Tìm nhanh theo họ tên, mã NV, phòng ban..." class="w-full text-xs pl-8 pr-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none">
+          </div>
+          <div id="employeeList" class="space-y-1.5 max-h-60 overflow-y-auto pr-1">
+            <div class="text-center py-6 text-xs text-slate-400">Đang tải danh sách nhân sự...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Cột phải (7/12): Đồng hồ thực tế & Theo dõi chấm công hôm nay -->
+      <div class="lg:col-span-7 bg-white rounded-2xl shadow-sm border border-slate-200 p-5 flex flex-col gap-4">
+        <!-- Đồng hồ thời gian thực Việt Nam -->
+        <div class="bg-gradient-to-br from-slate-800 via-slate-800 to-slate-900 text-white rounded-xl p-4 sm:p-5 relative overflow-hidden shadow">
+          <div class="absolute -right-6 -bottom-6 opacity-10 pointer-events-none">
+            <i class="fa-regular fa-clock text-[120px]"></i>
+          </div>
+          <div class="flex flex-wrap items-center justify-between gap-4 relative z-10">
+            <div>
+              <div class="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-emerald-300 mb-1">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                Theo dõi trực tuyến • GMT+7
+              </div>
+              <div class="live-clock text-3xl sm:text-4xl font-extrabold font-mono tracking-tight">00:00:00</div>
+              <div class="live-date text-xs sm:text-sm text-slate-300 mt-1 font-medium">Đang đồng bộ thời gian...</div>
+            </div>
+            <div class="bg-white/10 backdrop-blur-sm border border-white/15 rounded-xl px-3.5 py-2.5 text-xs space-y-1">
+              <div class="text-slate-300 font-medium">Quy định giờ hành chính</div>
+              <div class="font-semibold text-white"><i class="fa-regular fa-sun text-amber-300 mr-1"></i> Vào ca: 08:30</div>
+              <div class="font-semibold text-white"><i class="fa-regular fa-moon text-sky-300 mr-1"></i> Ra ca: 17:30</div>
+              <div class="text-[10px] text-slate-300 pt-0.5 border-t border-white/10">Nghỉ trưa 1 giờ (8h = 1 công)</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Thống kê & Bảng theo dõi chấm công hôm nay -->
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
+          <div>
+            <h2 class="text-sm font-bold text-slate-800 uppercase tracking-wide flex items-center gap-2">
+              <i class="fa-solid fa-clipboard-user text-indigo-600"></i>
+              Chấm công hôm nay (Tự động cập nhật)
+            </h2>
+            <p class="text-[11px] text-slate-500 mt-0.5">Bấm vào nhân sự để xem bảng chi tiết tháng và xuất PDF / Excel bên dưới.</p>
+          </div>
+          <div class="flex flex-wrap items-center gap-1.5 text-[11px] font-semibold">
+            <span id="statTodayTotal" class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">Tổng: 0</span>
+            <span id="statTodayWorking" class="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">Đang làm: 0</span>
+            <span id="statTodayDone" class="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">Hoàn thành: 0</span>
+            <span id="statTodayAbsent" class="px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">Chưa chấm: 0</span>
+          </div>
+        </div>
+
+        <div class="overflow-x-auto flex-1 max-h-[340px] overflow-y-auto border border-slate-200 rounded-xl">
+          <table class="w-full text-left border-collapse text-xs">
+            <thead class="sticky top-0 z-10">
+              <tr class="bg-slate-50 text-slate-600 border-b border-slate-200">
+                <th class="py-2.5 px-3 font-semibold">Nhân sự</th>
+                <th class="py-2.5 px-2.5 font-semibold">Phòng ban</th>
+                <th class="py-2.5 px-2.5 font-semibold text-center">Vào</th>
+                <th class="py-2.5 px-2.5 font-semibold text-center">Ra</th>
+                <th class="py-2.5 px-2.5 font-semibold text-center">Trạng thái</th>
+                <th class="py-2.5 px-3 font-semibold text-right">Xem</th>
+              </tr>
+            </thead>
+            <tbody id="todayOverviewTbody" class="divide-y divide-slate-100 bg-white">
+              <tr>
+                <td colspan="6" class="py-8 text-center text-slate-400">Đang tải dữ liệu theo dõi hôm nay...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Thanh điều khiển Bảng chi tiết tháng (chọn nhân sự, chọn tháng, xóa nhanh) -->
+    <section class="bg-white rounded-2xl shadow-sm border border-slate-200 px-5 py-3.5 flex flex-wrap items-center justify-between gap-3 no-print">
+      <div class="flex items-center gap-3 min-w-0">
+        <div class="w-10 h-10 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center font-bold text-sm flex-shrink-0 border border-slate-200" id="selectedAvatar">
+          <i class="fa-solid fa-user"></i>
+        </div>
+        <div class="min-w-0">
+          <div class="text-[11px] text-slate-500">Đang xem Bảng chấm công của:</div>
+          <div id="selectedEmpTitle" class="text-sm font-bold text-slate-900 truncate">Chưa chọn nhân sự</div>
+          <div id="selectedEmpSub" class="text-xs text-slate-500 truncate">Chọn nhân sự từ danh sách phía trên để xem &amp; xuất bảng</div>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-2.5">
+        <div class="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5">
+          <label for="monthSelector" class="text-xs font-semibold text-slate-700">Tháng xuất bảng:</label>
+          <input type="month" id="monthSelector" onchange="handleMonthChange()" class="text-xs font-bold bg-transparent text-slate-900 focus:outline-none">
+        </div>
+        <button type="button" id="btnDeleteSelectedEmp" onclick="openDeleteModal(event, selectedEmpId)" class="hidden px-3 py-2 rounded-lg text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition items-center gap-1.5" title="Xóa nhân sự đang chọn">
+          <i class="fa-solid fa-trash-can"></i>
+          <span>Xóa nhân sự này</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- ================= KHỐI 2: BẢNG CHI TIẾT CHẤM CÔNG CHUẨN MẪU CC T10_2.xlsx ================= -->
+    <section id="timesheetSection" class="bg-white rounded-2xl shadow-md border border-slate-200 p-3 sm:p-6 overflow-x-auto">
+      <div id="printableArea" class="timesheet-wrap bg-white min-w-[760px] max-w-[960px] mx-auto p-2 sm:p-4">
+
+        <!-- Header biểu mẫu: Logo iDOCTOR + Tiêu đề BẢNG CHI TIẾT CHẤM CÔNG -->
+        <div class="flex items-center justify-between gap-4 pb-2 mb-1">
+          <!-- Logo iDOCTOR chuẩn DESIGN GUIDELINE (dọc cho biểu mẫu) -->
+          <div class="w-28 flex-shrink-0 flex flex-col items-center">
+            <svg class="w-16 h-16" viewBox="0 0 220 220" xmlns="http://www.w3.org/2000/svg" aria-label="iDOCTOR Print Logo">
+              <defs>
+                <path id="printTopArc" d="M 32,115 A 78,78 0 1,1 188,115" fill="none"/>
+                <path id="printBotArc" d="M 36,125 A 79,79 0 0,0 184,125" fill="none"/>
+              </defs>
+              <circle cx="110" cy="110" r="95" fill="none" stroke="#777777" stroke-width="2.4"/>
+              <circle cx="110" cy="110" r="65" fill="none" stroke="#777777" stroke-width="2.4"/>
+              <path d="M 94,69 H 126 V 94 H 151 V 126 H 126 V 151 H 94 V 126 H 69 V 94 H 94 Z" fill="#777777"/>
+              <text fill="#777777" font-family="'Playfair Display', Georgia, serif" font-size="18.5" letter-spacing="2.2">
+                <textPath href="#printTopArc" startOffset="50%" text-anchor="middle">C&#183;O&#183;S&#183;M&#183;E&#183;C&#183;E&#183;U&#183;T&#183;I&#183;C&#183;A&#183;L</textPath>
+              </text>
+              <text fill="#777777" font-family="'Playfair Display', Georgia, serif" font-size="19.5" letter-spacing="5">
+                <textPath href="#printBotArc" startOffset="50%" text-anchor="middle">iDOCTOR</textPath>
+              </text>
+              <circle cx="195" cy="30" r="13" fill="none" stroke="#777777" stroke-width="2.2"/>
+              <text x="195" y="36" fill="#777777" font-family="Arial, sans-serif" font-size="16" font-weight="600" text-anchor="middle">R</text>
+            </svg>
+            <div style="font-family: 'Montserrat', sans-serif; color: #777777;" class="text-sm font-light tracking-[0.18em] leading-none mt-0.5">iDOCTOR</div>
+          </div>
+
+          <!-- Tiêu đề chính giữa -->
+          <div class="flex-1 text-center">
+            <h1 class="text-xl sm:text-2xl font-bold tracking-wide text-black uppercase">BẢNG CHI TIẾT CHẤM CÔNG</h1>
+            <div id="sheetMonthTitle" class="text-xs font-bold text-slate-700 mt-0.5">Tháng -- / ----</div>
+          </div>
+
+          <!-- Cân đối lề phải -->
+          <div class="w-28 flex-shrink-0 text-right text-[10px] text-slate-600 self-end pb-1">
+            <div>Đơn vị: <strong>iDOCTOR</strong></div>
+            <div id="sheetExportDate">Ngày xuất: --/--/----</div>
+          </div>
+        </div>
+
+        <!-- Thanh thông tin nhân viên nền VÀNG RỰC (#FFFF00) -->
+        <div class="bg-yellow-exact border border-black px-2 py-1 text-xs sm:text-[13px] font-bold text-black flex flex-wrap items-center">
+          <div class="w-[26%]">Mã nhân viên: <span id="sheetEmpCode">------</span></div>
+          <div class="w-[44%]">Tên nhân viên: <span id="sheetEmpName">--------------------</span></div>
+          <div class="w-[30%]">Phòng ban: <span id="sheetEmpDept">--------</span></div>
+        </div>
+
+        <!-- Khối bảng tổng hợp 3 hàng phía trên (chuẩn mẫu CC T10.xlsx) -->
+        <table class="summary-table mt-[-1px]">
+          <colgroup>
+            <col style="width: 12%;">
+            <col style="width: 7%;">
+            <col style="width: 7%;">
+            <col style="width: 6%;">
+            <col style="width: 12%;">
+            <col style="width: 8%;">
+            <col style="width: 5%;">
+            <col style="width: 12%;">
+            <col style="width: 8%;">
+            <col style="width: 5%;">
+            <col style="width: 12%;">
+            <col style="width: 6%;">
+          </colgroup>
+          <tbody>
+            <tr>
+              <td class="font-bold text-left">Tổng giờ</td>
+              <td colspan="2" class="font-bold text-right" id="sumTongGio">0</td>
+              <td class="no-border"></td>
+              <td class="font-bold text-left">Số lần trễ</td>
+              <td class="font-bold text-right" id="sumSoLanTre">0</td>
+              <td class="no-border"></td>
+              <td class="font-bold text-left">Số phút trễ</td>
+              <td class="font-bold text-right" id="sumSoPhutTre">0</td>
+              <td class="no-border"></td>
+              <td class="font-bold text-left">Tăng ca ngày lễ</td>
+              <td class="font-bold text-right" id="sumTCNgayLe"></td>
+            </tr>
+            <tr>
+              <td class="font-bold text-left">Tổng công</td>
+              <td colspan="2" class="font-bold text-right" id="sumTongCong">0</td>
+              <td class="no-border"></td>
+              <td class="font-bold text-left">Số lần sớm</td>
+              <td class="font-bold text-right" id="sumSoLanSom">0</td>
+              <td class="no-border"></td>
+              <td class="font-bold text-left">Số phút sớm</td>
+              <td class="font-bold text-right" id="sumSoPhutSom">0</td>
+              <td class="no-border"></td>
+              <td></td>
+              <td></td>
+            </tr>
+            <tr>
+              <td class="font-bold text-left">Tăng ca</td>
+              <td class="font-bold text-right" id="sumTangCa1">0</td>
+              <td class="font-bold text-right" id="sumTangCa2">0</td>
+              <td class="no-border"></td>
+              <td class="font-bold text-left">Vắng KP</td>
+              <td class="font-bold text-right" id="sumVangKP">0</td>
+              <td class="no-border"></td>
+              <td class="font-bold text-left">Vắng CP</td>
+              <td class="font-bold text-right" id="sumVangCP">0</td>
+              <td class="no-border"></td>
+              <td></td>
+              <td></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <!-- Thanh tiêu đề phụ: Chi tiết -->
+        <div class="border-x border-b border-black text-center font-bold text-xs py-0.5 text-black">
+          Chi tiết
+        </div>
+
+        <!-- Bảng chi tiết 16 cột đúng thứ tự CC T10.xlsx -->
+        <table class="sheet-table mt-[-1px]">
+          <thead>
+            <tr class="font-bold">
+              <th rowspan="2" style="width: 8%;">Ngày</th>
+              <th rowspan="2" style="width: 5.5%;">Thứ</th>
+              <th colspan="2" style="width: 12%;">1</th>
+              <th colspan="2" style="width: 11%;">2</th>
+              <th colspan="2" style="width: 11%;">3</th>
+              <th rowspan="2" style="width: 5.5%;">Trễ</th>
+              <th rowspan="2" style="width: 5.5%;">Sớm</th>
+              <th rowspan="2" style="width: 6.5%;">Về trễ</th>
+              <th rowspan="2" style="width: 6%;">Giờ</th>
+              <th rowspan="2" style="width: 6.5%;">Công</th>
+              <th rowspan="2" style="width: 6.5%;">T.Ca1</th>
+              <th rowspan="2" style="width: 6.5%;">T.Ca2</th>
+              <th rowspan="2" style="width: 6.5%;">Ký hiệu</th>
+            </tr>
+            <tr class="font-bold">
+              <th>Vào</th>
+              <th>Ra</th>
+              <th>Vào</th>
+              <th>Ra</th>
+              <th>Vào</th>
+              <th>Ra</th>
+            </tr>
+          </thead>
+          <tbody id="timesheetTbody">
+            <!-- Render dynamically -->
+          </tbody>
+        </table>
+
+        <!-- Chú thích ký hiệu nhỏ -->
+        <div class="mt-1.5 text-[10px] text-slate-700 flex flex-wrap gap-4">
+          <span><strong>Ghi chú ký hiệu:</strong></span>
+          <span><strong>X:</strong> Đủ Vào &amp; Ra</span>
+          <span><strong>O:</strong> Chỉ có giờ Vào</span>
+          <span><strong>V:</strong> Vắng / Nghỉ</span>
+        </div>
+
+        <!-- ================= KHU VỰC KÝ TÊN XÁC NHẬN ================= -->
+        <div class="mt-5 pt-3 grid grid-cols-2 gap-8 text-center text-black">
+          <!-- Bên trái: Nhân sự xác nhận -->
+          <div class="flex flex-col items-center">
+            <div class="text-xs italic text-slate-700 mb-1">&nbsp;</div>
+            <div class="font-bold text-xs uppercase">Nhân sự xác nhận</div>
+            <div class="text-[11px] italic text-slate-600">(Ký, ghi rõ họ tên)</div>
+            <div class="h-24 w-56 flex items-center justify-center my-1">
+              <span id="sigEmpScript" class="text-base italic text-slate-500"></span>
+            </div>
+            <div id="sigEmpFullName" class="font-bold text-xs text-black">--------------------</div>
+          </div>
+
+          <!-- Bên phải: Trưởng bộ phận ký duyệt + Signature Canvas -->
+          <div class="flex flex-col items-center">
+            <div class="text-xs italic text-slate-800 mb-1 flex items-center justify-center gap-1">
+              <span>Ngày ký:</span>
+              <input type="date" id="managerSignDate" class="print-input-clean text-xs border-b border-slate-300 bg-transparent px-1 py-0 text-center focus:outline-none focus:border-blue-500">
+            </div>
+            <div class="font-bold text-xs uppercase">Trưởng bộ phận ký duyệt</div>
+            <div class="text-[11px] italic text-slate-600">(Ký, ghi rõ họ tên)</div>
+
+            <!-- Canvas Signature Pad -->
+            <div class="sig-pad-wrapper sig-pad-box relative w-64 h-24 border border-dashed border-slate-400 rounded-lg bg-slate-50/70 my-1 overflow-hidden">
+              <canvas id="managerSignatureCanvas" class="w-full h-full cursor-crosshair block"></canvas>
+              <button type="button" onclick="clearSignaturePad()" class="no-print absolute top-1 right-1 bg-white/90 hover:bg-rose-50 text-rose-600 border border-slate-300 rounded px-1.5 py-0.5 text-[10px] font-sans font-medium shadow-sm transition">
+                <i class="fa-solid fa-eraser mr-0.5"></i>Xóa chữ ký
+              </button>
+              <span id="sigPlaceholder" class="no-print pointer-events-none absolute inset-0 flex items-center justify-center text-[11px] font-sans text-slate-400">
+                Ký trực tiếp vào đây (chuột / cảm ứng)
+              </span>
+            </div>
+
+            <!-- Input Họ tên Trưởng bộ phận -->
+            <input type="text" id="managerNameInput" placeholder="Nhập họ tên Trưởng bộ phận..." class="print-input-clean w-60 text-center font-bold text-xs text-black border-b border-slate-300 bg-transparent py-0.5 focus:outline-none focus:border-blue-500">
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ================= VIEW 2: CỔNG CHẤM CÔNG DÀNH RIÊNG CHO NHÂN VIÊN (?mode=checkin) ================= -->
+  <div id="employeeCheckinView" class="hidden min-h-screen bg-slate-100 flex-col">
+    <!-- Banner chỉ hiện khi Quản lý đã mở khóa PIN và chuyển sang xem trang NV -->
+    <div id="previewBackBar" class="hidden bg-indigo-600 text-white px-4 py-2.5 text-xs font-medium shadow">
+      <div class="max-w-lg mx-auto flex items-center justify-between gap-3">
+        <span><i class="fa-solid fa-shield-halved mr-1.5"></i>Bạn đang đăng nhập quyền Quản lý</span>
+        <button type="button" onclick="togglePreviewEmployeeMode(false)" class="bg-white text-indigo-700 hover:bg-indigo-50 px-3 py-1 rounded-lg font-bold transition shadow-sm">
+          <i class="fa-solid fa-arrow-left mr-1"></i>Về Trang Quản Lý
+        </button>
+      </div>
+    </div>
+
+    <div class="max-w-lg mx-auto w-full p-4 sm:p-6 space-y-5 flex-1">
+      <!-- Card Logo & Đồng hồ -->
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+        <div class="px-4 sm:px-5 py-3.5 border-b border-slate-100 flex items-center justify-between gap-2">
+          <div class="flex items-center gap-2.5">
+            <svg class="w-11 h-11 flex-shrink-0" viewBox="0 0 220 220" xmlns="http://www.w3.org/2000/svg" aria-label="iDOCTOR Logo">
+              <defs>
+                <path id="empTopArc" d="M 32,115 A 78,78 0 1,1 188,115" fill="none"/>
+                <path id="empBotArc" d="M 36,125 A 79,79 0 0,0 184,125" fill="none"/>
+              </defs>
+              <circle cx="110" cy="110" r="95" fill="none" stroke="#777777" stroke-width="2.4"/>
+              <circle cx="110" cy="110" r="65" fill="none" stroke="#777777" stroke-width="2.4"/>
+              <path d="M 94,69 H 126 V 94 H 151 V 126 H 126 V 151 H 94 V 126 H 69 V 94 H 94 Z" fill="#777777"/>
+              <text fill="#777777" font-family="'Playfair Display', Georgia, serif" font-size="18.5" letter-spacing="2.2">
+                <textPath href="#empTopArc" startOffset="50%" text-anchor="middle">C&#183;O&#183;S&#183;M&#183;E&#183;C&#183;E&#183;U&#183;T&#183;I&#183;C&#183;A&#183;L</textPath>
+              </text>
+              <text fill="#777777" font-family="'Playfair Display', Georgia, serif" font-size="19.5" letter-spacing="5">
+                <textPath href="#empBotArc" startOffset="50%" text-anchor="middle">iDOCTOR</textPath>
+              </text>
+              <circle cx="195" cy="30" r="13" fill="none" stroke="#777777" stroke-width="2.2"/>
+              <text x="195" y="36" fill="#777777" font-family="Arial, sans-serif" font-size="16" font-weight="600" text-anchor="middle">R</text>
+            </svg>
+            <div>
+              <div style="font-family: 'Montserrat', sans-serif; color: #777777;" class="text-xl font-light tracking-[0.14em] leading-none">iDOCTOR</div>
+              <div class="text-[11px] text-slate-500 font-semibold mt-0.5">Cổng Chấm Công Nhân Viên</div>
+            </div>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <div class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-[11px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
+              <span id="empSyncDot" class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+              <span id="empSyncText" class="hidden sm:inline">Đang kết nối...</span>
+            </div>
+            <button type="button" onclick="requestAdminAccess()" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold bg-slate-800 hover:bg-slate-900 text-white transition shadow-sm" title="Dành cho Quản lý theo dõi & xuất bảng công">
+              <i class="fa-solid fa-lock text-[10px]"></i>
+              <span>Quản lý</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="bg-gradient-to-br from-slate-800 via-slate-800 to-slate-900 text-white p-5 text-center relative overflow-hidden">
+          <div class="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-emerald-300 mb-1">
+            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+            Giờ Việt Nam (GMT+7)
+          </div>
+          <div class="live-clock text-4xl sm:text-5xl font-extrabold font-mono tracking-tight">00:00:00</div>
+          <div class="live-date text-xs sm:text-sm text-slate-300 mt-1.5 font-medium">Đang đồng bộ thời gian...</div>
+          <div class="mt-3 inline-flex items-center gap-3 bg-white/10 border border-white/15 rounded-full px-3.5 py-1 text-[11px] text-slate-200">
+            <span><i class="fa-regular fa-sun text-amber-300 mr-1"></i>Vào: 08:30</span>
+            <span class="opacity-40">|</span>
+            <span><i class="fa-regular fa-moon text-sky-300 mr-1"></i>Ra: 17:30</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bước 1: Chọn tên nhân sự -->
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 space-y-3.5">
+        <div class="flex items-center justify-between">
+          <h2 class="text-sm font-bold text-slate-800 flex items-center gap-2">
+            <span class="w-5 h-5 rounded-full bg-blue-600 text-white text-[11px] flex items-center justify-center font-bold">1</span>
+            Chọn tên của bạn để chấm công
+          </h2>
+          <span id="empPortalCount" class="text-[11px] font-semibold text-slate-500">0 nhân sự</span>
+        </div>
+
+        <div class="relative">
+          <i class="fa-solid fa-magnifying-glass text-slate-400 text-xs absolute left-3.5 top-1/2 -translate-y-1/2"></i>
+          <input type="text" id="empPortalSearch" oninput="renderEmployeePortalList()" placeholder="Nhập tên hoặc mã NV để tìm nhanh..." class="w-full text-sm pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none">
+        </div>
+
+        <div id="empPortalList" class="space-y-1.5 max-h-52 overflow-y-auto pr-1">
+          <div class="text-center py-6 text-xs text-slate-400">Đang tải danh sách nhân sự...</div>
+        </div>
+      </div>
+
+      <!-- Bước 2: Check-in / Check-out 1 lần mỗi ngày -->
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+          <h2 class="text-sm font-bold text-slate-800 flex items-center gap-2">
+            <span class="w-5 h-5 rounded-full bg-emerald-600 text-white text-[11px] flex items-center justify-center font-bold">2</span>
+            Chấm công hôm nay
+          </h2>
+          <div id="empTodayStatusBadge" class="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-600">
+            Chưa chọn nhân sự
+          </div>
+        </div>
+
+        <div id="empPortalSelectedCard" class="bg-slate-50 border border-slate-200 rounded-xl p-3.5 flex items-center gap-3">
+          <div id="empPortalAvatar" class="w-11 h-11 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center font-bold text-base flex-shrink-0">
+            <i class="fa-solid fa-user"></i>
+          </div>
+          <div class="min-w-0">
+            <div id="empPortalSelectedName" class="text-sm font-bold text-slate-900 truncate">Vui lòng chọn tên của bạn ở Bước 1</div>
+            <div id="empPortalSelectedSub" class="text-xs text-slate-500 truncate">Mỗi ngày chỉ được Check-in 1 lần và Check-out 1 lần</div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <button id="btnCheckIn" onclick="performCheckIn()" disabled class="w-full py-4 px-4 rounded-xl font-bold text-sm transition flex flex-col items-center justify-center gap-1.5 shadow-sm border-2 bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed">
+            <div class="flex items-center gap-2 text-base">
+              <i class="fa-solid fa-right-to-bracket"></i>
+              <span>CHECK IN (Vào ca)</span>
+            </div>
+            <span id="btnCheckInSub" class="text-xs font-medium opacity-90">Chỉ được bấm 1 lần/ngày</span>
+          </button>
+
+          <button id="btnCheckOut" onclick="performCheckOut()" disabled class="w-full py-4 px-4 rounded-xl font-bold text-sm transition flex flex-col items-center justify-center gap-1.5 shadow-sm border-2 bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed">
+            <div class="flex items-center gap-2 text-base">
+              <i class="fa-solid fa-right-from-bracket"></i>
+              <span>CHECK OUT (Ra ca)</span>
+            </div>
+            <span id="btnCheckOutSub" class="text-xs font-medium opacity-90">Kích hoạt sau khi Check-in</span>
+          </button>
+        </div>
+
+        <p class="text-[11px] text-slate-500 text-center">
+          <i class="fa-solid fa-cloud-arrow-up text-blue-600 mr-1"></i>
+          Thời gian chấm công sẽ tự động cập nhật ngay về hệ thống Quản lý.
+        </p>
+      </div>
+
+      <!-- Lịch sử chấm công gần đây của nhân sự đang chọn -->
+      <div id="empRecentHistoryBox" class="hidden bg-white rounded-2xl shadow-sm border border-slate-200 p-5 space-y-3">
+        <div class="flex items-center justify-between">
+          <h3 class="text-xs font-bold text-slate-700 uppercase tracking-wide flex items-center gap-1.5">
+            <i class="fa-solid fa-clock-rotate-left text-blue-600"></i>
+            Lịch sử chấm công gần đây của bạn
+          </h3>
+        </div>
+        <div id="empRecentHistoryList" class="divide-y divide-slate-100 text-xs"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= FIREBASE & APPLICATION SCRIPT ================= -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import {
+      getFirestore,
+      collection,
+      doc,
+      setDoc,
+      deleteDoc,
+      onSnapshot,
+      writeBatch
+    } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    // ================= GLOBAL STATE =================
+    // Dán URL Google Apps Script Web App của bạn vào đây để chạy web độc lập (không cần Gemini/Firebase)
+    const GOOGLE_SHEET_API_URL = '';
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'idoctor-timesheet-default';
+
+    let db = null;
+    let auth = null;
+    let currentUser = null;
+    let storageMode = 'memory'; // 'gsheet' | 'firebase' | 'memory'
+    let useMemoryFallback = false;
+    let gsheetPollTimer = null;
+    let activeViewMode = 'checkin'; // Mặc định mở link sẽ vào Trang Chấm Công Nhân Viên
+    let isManagerUnlocked = false;
+    let managerPin = '1234';
+
+    let employees = [];           // Array of { id, code, name, dept, title, createdAt }
+    let attendanceMap = {};       // Map keyed by `${empId}_${YYYY-MM-DD}` -> record object
+    let selectedEmpId = null;
+    let pendingDeleteEmpId = null;
+    let currentYearMonth = '';    // Format 'YYYY-MM'
+    let isSubmittingAction = false;
+    let lastRenderedSummary = null;
+    let lastRenderedRows = [];
+
+    // ================= URL MODE & VIEW ROUTING =================
+    function isGoogleSitesEmbed() {
+      const host = window.location.hostname || '';
+      const path = window.location.pathname || '';
+      return (
+        host.includes('googleusercontent.com') ||
+        host.includes('atari-embeds') ||
+        path.includes('inner-frame')
+      );
+    }
+
+    function isSandboxPreview() {
+      const proto = window.location.protocol || '';
+      const origin = window.location.origin || '';
+      const path = window.location.pathname || '';
+      const host = window.location.hostname || '';
+      let isInIframe = false;
+      try {
+        isInIframe = window.self !== window.top;
+      } catch (e) {
+        isInIframe = true;
+      }
+      return (
+        isInIframe ||
+        isGoogleSitesEmbed() ||
+        proto === 'about:' ||
+        proto === 'blob:' ||
+        origin === 'null' ||
+        path.includes('srcdoc') ||
+        host.includes('usercontent.goog')
+      );
+    }
+
+    function detectUrlMode() {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('mode') === 'admin' || window.location.hash === '#admin') {
+        return isManagerUnlocked ? 'admin' : 'checkin';
+      }
+      // Mặc định mọi người mở link đều vào thẳng Trang Chấm Công Nhân Viên
+      return 'checkin';
+    }
+
+    function getBaseCleanUrl() {
+      return `${window.location.origin}${window.location.pathname}`;
+    }
+
+    function getEmployeeCheckinUrl() {
+      return getBaseCleanUrl();
+    }
+
+    function updateShareLinkBanner() {
+      const sandboxNotice = document.getElementById('sandboxNotice');
+      const sandboxNoticeText = document.getElementById('sandboxNoticeText');
+      const previewWrap = document.getElementById('realLinkPreviewWrap');
+      const controlsWrap = document.getElementById('realLinkControls');
+      const previewEl = document.getElementById('checkinLinkPreview');
+
+      if (isGoogleSitesEmbed()) {
+        if (sandboxNotice) sandboxNotice.classList.remove('hidden');
+        if (sandboxNoticeText) {
+          sandboxNoticeText.innerHTML =
+            'Đang chạy nhúng trên <strong>Google Sites</strong>: Hãy copy trực tiếp đường link trang Google Sites của bạn trên <strong>thanh địa chỉ trình duyệt</strong> (dạng <code>https://sites.google.com/view/...</code>) để gửi cho nhân viên (không dùng link khung nhúng nội bộ).';
+        }
+        if (previewWrap) previewWrap.classList.add('hidden');
+        if (controlsWrap) controlsWrap.classList.add('hidden');
+      } else if (isSandboxPreview()) {
+        if (sandboxNotice) sandboxNotice.classList.remove('hidden');
+        if (sandboxNoticeText) {
+          sandboxNoticeText.innerHTML =
+            'Đang ở khung Xem thử (Preview/Iframe): Hãy gửi trực tiếp đường link trên thanh địa chỉ trình duyệt hoặc bấm nút <strong>Chia sẻ (Share)</strong> để tạo link công khai gửi nhân viên!';
+        }
+        if (previewWrap) previewWrap.classList.add('hidden');
+        if (controlsWrap) controlsWrap.classList.add('hidden');
+      } else {
+        if (sandboxNotice) sandboxNotice.classList.add('hidden');
+        if (previewWrap) previewWrap.classList.remove('hidden');
+        if (controlsWrap) controlsWrap.classList.remove('hidden');
+        if (previewEl) previewEl.textContent = getEmployeeCheckinUrl();
+      }
+    }
+
+    function applyViewMode(mode) {
+      activeViewMode = mode;
+
+      const adminHeader = document.getElementById('adminHeader');
+      const adminView = document.getElementById('adminView');
+      const empView = document.getElementById('employeeCheckinView');
+      const previewBar = document.getElementById('previewBackBar');
+
+      if (mode === 'checkin') {
+        adminHeader.classList.add('hidden');
+        adminView.classList.add('hidden');
+        empView.classList.remove('hidden');
+        empView.classList.add('flex');
+        if (isManagerUnlocked) {
+          previewBar.classList.remove('hidden');
+        } else {
+          previewBar.classList.add('hidden');
+        }
+        renderEmployeePortalList();
+        updateEmployeePortalUI();
+      } else {
+        empView.classList.add('hidden');
+        empView.classList.remove('flex');
+        previewBar.classList.add('hidden');
+        adminHeader.classList.remove('hidden');
+        adminView.classList.remove('hidden');
+        updateShareLinkBanner();
+        renderEmployeeList();
+        renderTodayOverviewTable();
+        updateSelectedEmployeeUI();
+        renderTimesheet();
+      }
+    }
+
+    window.togglePreviewEmployeeMode = function (enable) {
+      if (!enable && !isManagerUnlocked) {
+        window.requestAdminAccess();
+        return;
+      }
+      applyViewMode(enable ? 'checkin' : 'admin');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    // ================= MANAGER PIN AUTHENTICATION =================
+    window.requestAdminAccess = function () {
+      if (isManagerUnlocked) {
+        applyViewMode('admin');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+      const modal = document.getElementById('pinModal');
+      const input = document.getElementById('pinInput');
+      const errEl = document.getElementById('pinError');
+      const hintEl = document.getElementById('pinDefaultHint');
+
+      if (input) input.value = '';
+      if (errEl) errEl.classList.add('hidden');
+      if (hintEl) {
+        hintEl.classList.toggle('hidden', managerPin !== '1234');
+      }
+
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+      setTimeout(() => {
+        if (input) input.focus();
+      }, 60);
+    };
+
+    window.closePinModal = function () {
+      const modal = document.getElementById('pinModal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    };
+
+    window.handlePinSubmit = function (event) {
+      event.preventDefault();
+      const input = document.getElementById('pinInput');
+      const errEl = document.getElementById('pinError');
+      const entered = (input.value || '').trim();
+
+      if (entered === managerPin) {
+        isManagerUnlocked = true;
+        closePinModal();
+        if (employees.length > 0 && !selectedEmpId) {
+          selectedEmpId = employees[0].id;
+        }
+        applyViewMode('admin');
+        showToast('Đã mở khóa Trang Quản Lý & Theo Dõi Chấm Công!', 'success');
+      } else {
+        errEl.textContent = 'Mã PIN không đúng. Vui lòng thử lại.';
+        errEl.classList.remove('hidden');
+        input.select();
+      }
+    };
+
+    window.openChangePinModal = function () {
+      document.getElementById('oldPinInput').value = '';
+      document.getElementById('newPinInput').value = '';
+      document.getElementById('changePinError').classList.add('hidden');
+      const modal = document.getElementById('changePinModal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    };
+
+    window.closeChangePinModal = function () {
+      const modal = document.getElementById('changePinModal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    };
+
+    window.handleChangePinSubmit = async function (event) {
+      event.preventDefault();
+      const oldPin = document.getElementById('oldPinInput').value.trim();
+      const newPin = document.getElementById('newPinInput').value.trim();
+      const errEl = document.getElementById('changePinError');
+      const btn = document.getElementById('btnSaveNewPin');
+
+      if (oldPin !== managerPin) {
+        errEl.textContent = 'Mã PIN hiện tại không chính xác.';
+        errEl.classList.remove('hidden');
+        return;
+      }
+      if (newPin.length < 4) {
+        errEl.textContent = 'Mã PIN mới cần ít nhất 4 ký tự.';
+        errEl.classList.remove('hidden');
+        return;
+      }
+
+      btn.disabled = true;
+      try {
+        if (storageMode === 'gsheet') {
+          await gsheetPost('setPin', { managerPin: newPin });
+        } else if (storageMode === 'firebase' && currentUser && db) {
+          const cfgRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'config');
+          await setDoc(cfgRef, { managerPin: newPin, updatedAt: new Date().toISOString() }, { merge: true });
+        }
+        managerPin = newPin;
+        closeChangePinModal();
+        showToast('Đã cập nhật mã PIN Quản lý thành công!', 'success');
+      } catch (err) {
+        console.error('Change PIN error:', err);
+        errEl.textContent = 'Không thể lưu mã PIN. Vui lòng thử lại.';
+        errEl.classList.remove('hidden');
+      } finally {
+        btn.disabled = false;
+      }
+    };
+
+    // ================= STANDALONE DEPLOY (GOOGLE SHEETS APPS SCRIPT) =================
+    const APPS_SCRIPT_CODE = `function doGet(e) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var empSheet = ensureSheet_(ss, 'Employees', ['id', 'code', 'name', 'dept', 'title', 'createdAt']);
+    var attSheet = ensureSheet_(ss, 'Attendance', ['id', 'empId', 'dateISO', 'in1', 'out1', 'in2', 'out2', 'in3', 'out3', 'tre', 'som', 'veTre', 'gio', 'cong', 'tca1', 'tca2', 'kyHieu', 'isSampleExact', 'updatedAt']);
+    var cfgSheet = ensureSheet_(ss, 'Settings', ['key', 'value']);
+
+    var employees = readRowsAsObjects_(empSheet);
+    var attRows = readRowsAsObjects_(attSheet);
+    var attendance = {};
+    attRows.forEach(function(r) {
+      if (r.id) {
+        r.isSampleExact = (r.isSampleExact === true || r.isSampleExact === 'TRUE' || r.isSampleExact === 'true');
+        attendance[r.id] = r;
+      }
+    });
+
+    var cfgRows = readRowsAsObjects_(cfgSheet);
+    var managerPin = '1234';
+    cfgRows.forEach(function(c) {
+      if (c.key === 'managerPin' && c.value) managerPin = String(c.value);
+    });
+
+    return jsonOut_({ ok: true, employees: employees, attendance: attendance, managerPin: managerPin });
+  } catch (err) {
+    return jsonOut_({ ok: false, error: String(err) });
+  }
+}
+
+function doPost(e) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    var body = JSON.parse(e.postData.contents || '{}');
+    var action = body.action;
+    var data = body.data || {};
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var empSheet = ensureSheet_(ss, 'Employees', ['id', 'code', 'name', 'dept', 'title', 'createdAt']);
+    var attSheet = ensureSheet_(ss, 'Attendance', ['id', 'empId', 'dateISO', 'in1', 'out1', 'in2', 'out2', 'in3', 'out3', 'tre', 'som', 'veTre', 'gio', 'cong', 'tca1', 'tca2', 'kyHieu', 'isSampleExact', 'updatedAt']);
+    var cfgSheet = ensureSheet_(ss, 'Settings', ['key', 'value']);
+
+    if (action === 'addEmployee') {
+      upsertRowById_(empSheet, data.id, [data.id, data.code || '', data.name || '', data.dept || '', data.title || '', data.createdAt || '']);
+    } else if (action === 'deleteEmployee') {
+      deleteRowsWhere_(empSheet, 0, data.empId);
+      deleteRowsWhere_(attSheet, 1, data.empId);
+    } else if (action === 'upsertAttendance') {
+      upsertRowById_(attSheet, data.id, buildAttRow_(data));
+    } else if (action === 'batchSample') {
+      if (data.employee) {
+        var emp = data.employee;
+        upsertRowById_(empSheet, emp.id, [emp.id, emp.code || '', emp.name || '', emp.dept || '', emp.title || '', emp.createdAt || '']);
+      }
+      if (data.records && data.records.length) {
+        data.records.forEach(function(rec) {
+          upsertRowById_(attSheet, rec.id, buildAttRow_(rec));
+        });
+      }
+    } else if (action === 'setPin') {
+      upsertRowById_(cfgSheet, 'managerPin', ['managerPin', String(data.managerPin || '1234')]);
+    }
+
+    return jsonOut_({ ok: true });
+  } catch (err) {
+    return jsonOut_({ ok: false, error: String(err) });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function buildAttRow_(d) {
+  return [
+    d.id || '', d.empId || '', d.dateISO || '',
+    d.in1 || '', d.out1 || '', d.in2 || '', d.out2 || '', d.in3 || '', d.out3 || '',
+    d.tre || 0, d.som || 0, d.veTre || 0, d.gio || 0, d.cong || 0,
+    d.tca1 || 0, d.tca2 || 0, d.kyHieu || '', d.isSampleExact ? 'TRUE' : 'FALSE',
+    d.updatedAt || ''
+  ];
+}
+
+function ensureSheet_(ss, name, headers) {
+  var sheet = ss.getSheetByName(name);
+  if (!sheet) {
+    sheet = ss.insertSheet(name);
+    sheet.appendRow(headers);
+  } else if (sheet.getLastRow() === 0) {
+    sheet.appendRow(headers);
+  }
+  return sheet;
+}
+
+function readRowsAsObjects_(sheet) {
+  var values = sheet.getDataRange().getValues();
+  if (values.length < 2) return [];
+  var headers = values[0];
+  var result = [];
+  for (var i = 1; i < values.length; i++) {
+    var row = values[i];
+    if (!row[0]) continue;
+    var obj = {};
+    for (var j = 0; j < headers.length; j++) {
+      obj[headers[j]] = row[j] === null || row[j] === undefined ? '' : row[j];
+    }
+    result.push(obj);
+  }
+  return result;
+}
+
+function upsertRowById_(sheet, id, rowArray) {
+  var values = sheet.getDataRange().getValues();
+  for (var i = 1; i < values.length; i++) {
+    if (String(values[i][0]) === String(id)) {
+      sheet.getRange(i + 1, 1, 1, rowArray.length).setValues([rowArray]);
+      return;
+    }
+  }
+  sheet.appendRow(rowArray);
+}
+
+function deleteRowsWhere_(sheet, colIndex, matchValue) {
+  var values = sheet.getDataRange().getValues();
+  for (var i = values.length - 1; i >= 1; i--) {
+    if (String(values[i][colIndex]) === String(matchValue)) {
+      sheet.deleteRow(i + 1);
+    }
+  }
+}
+
+function jsonOut_(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+}`;
+
+    window.openDeployModal = function () {
+      const modal = document.getElementById('deployModal');
+      const input = document.getElementById('gsheetUrlInput');
+      if (input && GOOGLE_SHEET_API_URL) {
+        input.value = GOOGLE_SHEET_API_URL;
+      }
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    };
+
+    window.closeDeployModal = function () {
+      const modal = document.getElementById('deployModal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    };
+
+    window.copyAppsScriptCode = function () {
+      copyTextToClipboard(
+        APPS_SCRIPT_CODE,
+        'Đã sao chép mã Google Apps Script! Hãy dán vào Tiện ích mở rộng -> Apps Script trên Google Sheets.'
+      );
+    };
+
+    window.downloadConfiguredHtml = function () {
+      const input = document.getElementById('gsheetUrlInput');
+      const url = (input.value || '').trim();
+      if (!url || !url.startsWith('https://script.google.com/')) {
+        showToast('Vui lòng dán đúng đường dẫn Google Apps Script Web App (bắt đầu bằng https://script.google.com/...).', 'warning');
+        if (input) input.focus();
+        return;
+      }
+
+      try {
+        const cloneDoc = document.documentElement.cloneNode(true);
+        // Ẩn toàn bộ modal và làm sạch trạng thái động trước khi xuất file HTML độc lập
+        ['deployModal', 'pinModal', 'changePinModal', 'deleteModal'].forEach((id) => {
+          const el = cloneDoc.querySelector(`#${id}`);
+          if (el) {
+            el.classList.add('hidden');
+            el.classList.remove('flex');
+          }
+        });
+        const toastEl = cloneDoc.querySelector('#toastContainer');
+        if (toastEl) toastEl.innerHTML = '';
+
+        const gsheetInputClone = cloneDoc.querySelector('#gsheetUrlInput');
+        if (gsheetInputClone) gsheetInputClone.setAttribute('value', '');
+
+        let htmlText = '<!DOCTYPE html>\n' + cloneDoc.outerHTML;
+        const safeUrl = url.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        htmlText = htmlText.replace(
+          /const GOOGLE_SHEET_API_URL\s*=\s*['"][^'"]*['"];/,
+          `const GOOGLE_SHEET_API_URL = '${safeUrl}';`
+        );
+
+        const blob = new Blob([htmlText], { type: 'text/html;charset=utf-8' });
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = 'index.html';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 1500);
+
+        showToast('Đã tải xong file index.html độc lập! Hãy kéo thả file này lên app.netlify.com/drop để lấy link gửi nhân viên.', 'success');
+      } catch (err) {
+        console.error('Download standalone HTML error:', err);
+        showToast('Không thể tạo file tải xuống. Vui lòng thử lại.', 'error');
+      }
+    };
+
+    // ================= GOOGLE SHEETS SYNC API =================
+    async function gsheetFetchAll(silent = false) {
+      try {
+        const sep = GOOGLE_SHEET_API_URL.includes('?') ? '&' : '?';
+        const res = await fetch(`${GOOGLE_SHEET_API_URL}${sep}action=getAll&_t=${Date.now()}`, {
+          method: 'GET',
+          redirect: 'follow'
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+        if (!json.ok) throw new Error(json.error || 'Apps Script error');
+
+        const list = Array.isArray(json.employees) ? json.employees : [];
+        list.sort((a, b) => String(a.code || '').localeCompare(String(b.code || '')));
+        employees = list;
+        attendanceMap = json.attendance || {};
+        if (json.managerPin) {
+          managerPin = String(json.managerPin);
+        }
+
+        if (employees.length > 0 && !employees.find((e) => e.id === selectedEmpId)) {
+          selectedEmpId = activeViewMode === 'admin' ? employees[0].id : null;
+        } else if (employees.length === 0) {
+          selectedEmpId = null;
+        }
+
+        updateSyncBadge('online', 'Đồng bộ Google Sheets');
+        syncAllViews();
+      } catch (err) {
+        console.error('Google Sheets fetch error:', err);
+        if (!silent) {
+          updateSyncBadge('offline', 'Lỗi kết nối Sheets');
+          showToast('Không thể tải dữ liệu từ Google Sheets. Hãy kiểm tra lại quyền truy cập "Bất kỳ ai" của Apps Script.', 'error');
+        }
+      }
+    }
+
+    async function gsheetPost(action, data) {
+      const res = await fetch(GOOGLE_SHEET_API_URL, {
+        method: 'POST',
+        redirect: 'follow',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action, data })
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
+      if (!json.ok) throw new Error(json.error || 'Apps Script write error');
+      return json;
+    }
+
+    // ================= UTILITY HELPERS =================
+    function pad2(n) {
+      return String(n).padStart(2, '0');
+    }
+
+    function round2(num) {
+      return Math.round((Number(num) + Number.EPSILON) * 100) / 100;
+    }
+
+    function escapeHtml(str) {
+      return String(str || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function getVietnamNow() {
+      const now = new Date();
+      const utcMs = now.getTime() + now.getTimezoneOffset() * 60000;
+      return new Date(utcMs + 7 * 3600000);
+    }
+
+    function getTodayISO() {
+      const vn = getVietnamNow();
+      return `${vn.getFullYear()}-${pad2(vn.getMonth() + 1)}-${pad2(vn.getDate())}`;
+    }
+
+    function getCurrentHHMM() {
+      const vn = getVietnamNow();
+      return `${pad2(vn.getHours())}:${pad2(vn.getMinutes())}`;
+    }
+
+    function getVietnameseWeekdayShort(dateObj) {
+      const map = ['CN', 'Hai', 'Ba', 'Tư', 'Năm', 'Sáu', 'Bảy'];
+      return map[dateObj.getDay()];
+    }
+
+    function getVietnameseWeekdayFull(dateObj) {
+      const map = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
+      return map[dateObj.getDay()];
+    }
+
+    function parseHHMMToMinutes(timeStr) {
+      if (!timeStr || typeof timeStr !== 'string') return null;
+      const parts = timeStr.split(':');
+      if (parts.length < 2) return null;
+      const h = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10);
+      if (isNaN(h) || isNaN(m)) return null;
+      return h * 60 + m;
+    }
+
+    function formatDisplayDateExcelStyle(year, month1Based, day) {
+      return `${month1Based}/${day}/${year}`;
+    }
+
+    function formatTimeDisplay(timeStr) {
+      if (!timeStr) return '';
+      const parts = timeStr.split(':');
+      if (parts.length < 2) return timeStr;
+      return `${parseInt(parts[0], 10)}:${pad2(parseInt(parts[1], 10))}`;
+    }
+
+    // ================= TOAST NOTIFICATION =================
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toastContainer');
+      const colors = {
+        success: 'bg-emerald-600 text-white border-emerald-700',
+        error: 'bg-rose-600 text-white border-rose-700',
+        warning: 'bg-amber-500 text-white border-amber-600',
+        info: 'bg-slate-800 text-white border-slate-900'
+      };
+      const icons = {
+        success: 'fa-circle-check',
+        error: 'fa-circle-exclamation',
+        warning: 'fa-triangle-exclamation',
+        info: 'fa-circle-info'
+      };
+
+      const toast = document.createElement('div');
+      toast.className = `toast-enter pointer-events-auto flex items-start gap-2.5 px-4 py-3 rounded-xl shadow-lg border text-xs font-medium ${colors[type] || colors.info}`;
+      toast.innerHTML = `
+        <i class="fa-solid ${icons[type] || icons.info} text-sm mt-0.5 flex-shrink-0"></i>
+        <span class="flex-1 leading-relaxed">${escapeHtml(message)}</span>
+      `;
+      container.appendChild(toast);
+
+      setTimeout(() => {
+        toast.style.transition = 'opacity 0.25s ease, transform 0.25s ease';
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateX(30px)';
+        setTimeout(() => toast.remove(), 260);
+      }, 3600);
+    }
+
+    function updateSyncBadge(status, label) {
+      const pairs = [
+        [document.getElementById('syncDot'), document.getElementById('syncText')],
+        [document.getElementById('empSyncDot'), document.getElementById('empSyncText')]
+      ];
+      pairs.forEach(([dot, text]) => {
+        if (!dot || !text) return;
+        text.textContent = label;
+        if (status === 'online') {
+          dot.className = 'w-2 h-2 rounded-full bg-emerald-500';
+        } else if (status === 'offline') {
+          dot.className = 'w-2 h-2 rounded-full bg-amber-500';
+        } else {
+          dot.className = 'w-2 h-2 rounded-full bg-amber-400 animate-pulse';
+        }
+      });
+    }
+
+    // ================= LIVE CLOCK =================
+    function startLiveClock() {
+      function tick() {
+        const vn = getVietnamNow();
+        const timeStr = `${pad2(vn.getHours())}:${pad2(vn.getMinutes())}:${pad2(vn.getSeconds())}`;
+        const dateStr = `${getVietnameseWeekdayFull(vn)}, ngày ${pad2(vn.getDate())}/${pad2(vn.getMonth() + 1)}/${vn.getFullYear()}`;
+        const exportDateStr = `Ngày xuất: ${pad2(vn.getDate())}/${pad2(vn.getMonth() + 1)}/${vn.getFullYear()}`;
+
+        document.querySelectorAll('.live-clock').forEach((el) => {
+          el.textContent = timeStr;
+        });
+        document.querySelectorAll('.live-date').forEach((el) => {
+          el.textContent = dateStr;
+        });
+        const exportEl = document.getElementById('sheetExportDate');
+        if (exportEl) {
+          exportEl.textContent = exportDateStr;
+        }
+      }
+      tick();
+      setInterval(tick, 1000);
+    }
+
+    // ================= STORAGE INIT (GOOGLE SHEETS -> FIREBASE -> MEMORY) =================
+    async function initStorage() {
+      // Ưu tiên 1: Chạy độc lập kết nối Google Sheets
+      if (GOOGLE_SHEET_API_URL && GOOGLE_SHEET_API_URL.startsWith('https://script.google.com/')) {
+        storageMode = 'gsheet';
+        useMemoryFallback = false;
+        updateSyncBadge('connecting', 'Đang tải Google Sheets...');
+        await gsheetFetchAll(false);
+        if (gsheetPollTimer) clearInterval(gsheetPollTimer);
+        gsheetPollTimer = setInterval(() => gsheetFetchAll(true), 12000);
+        return;
+      }
+
+      // Ưu tiên 2: Chạy trực tiếp trên nền tảng có sẵn cấu hình trực tuyến
+      try {
+        const rawConfig = typeof __firebase_config !== 'undefined' ? __firebase_config : null;
+        if (!rawConfig) {
+          throw new Error('Missing __firebase_config');
+        }
+        const firebaseConfig = typeof rawConfig === 'string' ? JSON.parse(rawConfig) : rawConfig;
+        if (!firebaseConfig || !firebaseConfig.apiKey) {
+          throw new Error('Invalid Firebase config');
+        }
+
+        const app = initializeApp(firebaseConfig);
+        auth = getAuth(app);
+        db = getFirestore(app);
+
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          const cred = await signInWithCustomToken(auth, __initial_auth_token);
+          currentUser = cred.user;
+        } else {
+          const cred = await signInAnonymously(auth);
+          currentUser = cred.user;
+        }
+
+        storageMode = 'firebase';
+        useMemoryFallback = false;
+        updateSyncBadge('online', 'Đồng bộ trực tuyến');
+        subscribeRealtimeData();
+      } catch (err) {
+        console.warn('Storage init fallback (in-memory):', err);
+        storageMode = 'memory';
+        useMemoryFallback = true;
+        updateSyncBadge('offline', 'Chế độ tạm thời');
+        syncAllViews();
+      }
+    }
+
+    function syncAllViews() {
+      renderEmployeeList();
+      renderTodayOverviewTable();
+      updateSelectedEmployeeUI();
+      renderTimesheet();
+      renderEmployeePortalList();
+      updateEmployeePortalUI();
+    }
+
+    function subscribeRealtimeData() {
+      const empCol = collection(db, 'artifacts', appId, 'public', 'data', 'employees');
+      onSnapshot(
+        empCol,
+        (snapshot) => {
+          const list = [];
+          snapshot.forEach((docSnap) => {
+            list.push({ id: docSnap.id, ...docSnap.data() });
+          });
+          list.sort((a, b) => String(a.code || '').localeCompare(String(b.code || '')));
+          employees = list;
+
+          if (employees.length > 0 && !employees.find((e) => e.id === selectedEmpId)) {
+            if (activeViewMode === 'admin') {
+              selectedEmpId = employees[0].id;
+            } else {
+              selectedEmpId = null;
+            }
+          } else if (employees.length === 0) {
+            selectedEmpId = null;
+          }
+
+          syncAllViews();
+        },
+        (error) => {
+          console.error('Employees snapshot error:', error);
+          showToast('Lỗi đồng bộ danh sách nhân sự.', 'error');
+        }
+      );
+
+      const attCol = collection(db, 'artifacts', appId, 'public', 'data', 'attendance');
+      onSnapshot(
+        attCol,
+        (snapshot) => {
+          const map = {};
+          snapshot.forEach((docSnap) => {
+            map[docSnap.id] = { id: docSnap.id, ...docSnap.data() };
+          });
+          attendanceMap = map;
+          syncAllViews();
+        },
+        (error) => {
+          console.error('Attendance snapshot error:', error);
+          showToast('Lỗi đồng bộ dữ liệu chấm công.', 'error');
+        }
+      );
+
+      const cfgRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'config');
+      onSnapshot(
+        cfgRef,
+        (docSnap) => {
+          if (docSnap.exists() && docSnap.data().managerPin) {
+            managerPin = String(docSnap.data().managerPin);
+          }
+        },
+        (error) => {
+          console.warn('Settings snapshot error:', error);
+        }
+      );
+    }
+
+    // ================= SHARE LINKS (CLIPBOARD VIA EXEC_COMMAND) =================
+    function copyTextToClipboard(text, successMsg) {
+      try {
+        const tempInput = document.createElement('textarea');
+        tempInput.value = text;
+        tempInput.setAttribute('readonly', '');
+        tempInput.style.position = 'fixed';
+        tempInput.style.left = '-9999px';
+        document.body.appendChild(tempInput);
+        tempInput.select();
+        tempInput.setSelectionRange(0, tempInput.value.length);
+        const copied = document.execCommand('copy');
+        document.body.removeChild(tempInput);
+
+        if (copied) {
+          showToast(successMsg, 'success');
+        } else {
+          showToast('Không thể tự động sao chép. Hãy sao chép trực tiếp đường dẫn hiển thị.', 'warning');
+        }
+      } catch (err) {
+        console.error('Copy link error:', err);
+        showToast('Không thể tự động sao chép. Hãy sao chép trực tiếp đường dẫn hiển thị.', 'warning');
+      }
+    }
+
+    window.copyEmployeeCheckinLink = function () {
+      if (isGoogleSitesEmbed()) {
+        showToast('Hãy copy trực tiếp đường link Google Sites trên thanh địa chỉ trình duyệt (https://sites.google.com/view/...) để gửi cho nhân viên!', 'warning');
+        return;
+      }
+      if (isSandboxPreview()) {
+        showToast('Bạn đang ở chế độ Xem thử (Preview). Hãy copy link trên thanh địa chỉ hoặc bấm nút Chia sẻ (Share) để lấy link gửi nhân viên!', 'warning');
+        return;
+      }
+      const url = getEmployeeCheckinUrl();
+      copyTextToClipboard(
+        url,
+        'Đã sao chép Link Chấm Công! Nhân viên mở link sẽ vào thẳng màn hình Chấm Công.'
+      );
+    };
+
+    // ================= EMPLOYEE MANAGEMENT =================
+    function generateNextEmpCode() {
+      let maxNum = 0;
+      employees.forEach((e) => {
+        const num = parseInt(String(e.code || '').replace(/\D/g, ''), 10);
+        if (!isNaN(num) && num > maxNum) {
+          maxNum = num;
+        }
+      });
+      return String(maxNum + 1).padStart(5, '0');
+    }
+
+    window.handleAddEmployee = async function (event) {
+      event.preventDefault();
+      if (isSubmittingAction) return;
+
+      const name = document.getElementById('inputEmpName').value.trim();
+      const dept = document.getElementById('inputEmpDept').value.trim();
+      const title = document.getElementById('inputEmpTitle').value.trim();
+      let code = document.getElementById('inputEmpCode').value.trim();
+
+      if (!name || !dept) {
+        showToast('Vui lòng nhập đầy đủ Họ tên và Phòng ban.', 'warning');
+        return;
+      }
+
+      if (!code) {
+        code = generateNextEmpCode();
+      } else if (/^\d+$/.test(code) && code.length < 5) {
+        code = code.padStart(5, '0');
+      }
+
+      const existing = employees.find((e) => String(e.code).toLowerCase() === code.toLowerCase());
+      if (existing) {
+        selectedEmpId = existing.id;
+        renderEmployeeList();
+        renderTodayOverviewTable();
+        updateSelectedEmployeeUI();
+        renderTimesheet();
+        showToast(`Mã NV ${code} (${existing.name}) đã tồn tại. Đã chọn nhân sự này!`, 'info');
+        return;
+      }
+
+      isSubmittingAction = true;
+      const empId = `emp_${code}_${Date.now()}`;
+      const empData = {
+        code,
+        name,
+        dept,
+        title,
+        createdAt: new Date().toISOString()
+      };
+
+      try {
+        if (storageMode === 'gsheet') {
+          await gsheetPost('addEmployee', { id: empId, ...empData });
+          employees.push({ id: empId, ...empData });
+          employees.sort((a, b) => String(a.code || '').localeCompare(String(b.code || '')));
+        } else if (storageMode === 'firebase' && currentUser && db) {
+          const empDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'employees', empId);
+          await setDoc(empDocRef, empData);
+        } else {
+          employees.push({ id: empId, ...empData });
+          employees.sort((a, b) => String(a.code || '').localeCompare(String(b.code || '')));
+        }
+
+        selectedEmpId = empId;
+        document.getElementById('addEmployeeForm').reset();
+        syncAllViews();
+        showToast(`Đã thêm nhân sự ${name} (Mã: ${code}). Nhân sự có thể thấy tên mình ngay tại Link Chấm công!`, 'success');
+      } catch (err) {
+        console.error('Add employee error:', err);
+        showToast('Không thể lưu nhân sự. Vui lòng thử lại.', 'error');
+      } finally {
+        isSubmittingAction = false;
+      }
+    };
+
+    // ================= DELETE EMPLOYEE (MODAL + FIRESTORE BATCH) =================
+    window.openDeleteModal = function (event, empId) {
+      if (event) event.stopPropagation();
+      const emp = employees.find((e) => e.id === empId);
+      if (!emp) return;
+
+      pendingDeleteEmpId = empId;
+      document.getElementById('deleteModalEmpName').textContent = `${emp.name} (Mã NV: ${emp.code})`;
+      const modal = document.getElementById('deleteModal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    };
+
+    window.closeDeleteModal = function () {
+      pendingDeleteEmpId = null;
+      const modal = document.getElementById('deleteModal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    };
+
+    window.confirmDeleteEmployee = async function () {
+      if (!pendingDeleteEmpId || isSubmittingAction) return;
+      const targetId = pendingDeleteEmpId;
+      const targetEmp = employees.find((e) => e.id === targetId);
+      const btn = document.getElementById('btnConfirmDelete');
+
+      isSubmittingAction = true;
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i><span>Đang xóa...</span>';
+
+      try {
+        const relatedAttIds = Object.keys(attendanceMap).filter((key) => {
+          const rec = attendanceMap[key];
+          return (rec && rec.empId === targetId) || key.startsWith(`${targetId}_`);
+        });
+
+        if (storageMode === 'gsheet') {
+          await gsheetPost('deleteEmployee', { empId: targetId });
+          employees = employees.filter((e) => e.id !== targetId);
+          relatedAttIds.forEach((k) => delete attendanceMap[k]);
+        } else if (storageMode === 'firebase' && currentUser && db) {
+          const empRef = doc(db, 'artifacts', appId, 'public', 'data', 'employees', targetId);
+          if (relatedAttIds.length === 0) {
+            await deleteDoc(empRef);
+          } else {
+            let batch = writeBatch(db);
+            let opCount = 0;
+            batch.delete(empRef);
+            opCount++;
+
+            for (const attId of relatedAttIds) {
+              const attRef = doc(db, 'artifacts', appId, 'public', 'data', 'attendance', attId);
+              batch.delete(attRef);
+              opCount++;
+              if (opCount >= 450) {
+                await batch.commit();
+                batch = writeBatch(db);
+                opCount = 0;
+              }
+            }
+            if (opCount > 0) {
+              await batch.commit();
+            }
+          }
+        } else {
+          employees = employees.filter((e) => e.id !== targetId);
+          relatedAttIds.forEach((k) => delete attendanceMap[k]);
+        }
+
+        if (selectedEmpId === targetId) {
+          const remaining = employees.filter((e) => e.id !== targetId);
+          selectedEmpId = remaining.length > 0 ? remaining[0].id : null;
+        }
+
+        closeDeleteModal();
+        syncAllViews();
+        showToast(`Đã xóa nhân sự ${targetEmp ? targetEmp.name : ''} và toàn bộ dữ liệu chấm công liên quan.`, 'success');
+      } catch (err) {
+        console.error('Delete employee error:', err);
+        showToast('Không thể xóa nhân sự. Vui lòng thử lại.', 'error');
+      } finally {
+        isSubmittingAction = false;
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-trash-can"></i><span>Xác nhận xóa</span>';
+      }
+    };
+
+    window.selectEmployee = function (empId) {
+      selectedEmpId = empId;
+      syncAllViews();
+    };
+
+    window.jumpToEmployeeTimesheet = function (empId) {
+      window.selectEmployee(empId);
+      const section = document.getElementById('timesheetSection');
+      if (section) {
+        section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    };
+
+    window.renderEmployeeList = function () {
+      const container = document.getElementById('employeeList');
+      const countBadge = document.getElementById('empCountBadge');
+      const keyword = (document.getElementById('searchEmpInput').value || '').trim().toLowerCase();
+
+      countBadge.textContent = `${employees.length} nhân sự`;
+
+      const filtered = employees.filter((e) => {
+        if (!keyword) return true;
+        return (
+          (e.name || '').toLowerCase().includes(keyword) ||
+          (e.dept || '').toLowerCase().includes(keyword) ||
+          (e.title || '').toLowerCase().includes(keyword) ||
+          (e.code || '').toLowerCase().includes(keyword)
+        );
+      });
+
+      if (filtered.length === 0) {
+        container.innerHTML = `
+          <div class="text-center py-6 px-3 text-xs text-slate-400 border border-dashed border-slate-200 rounded-xl">
+            ${employees.length === 0 ? 'Chưa có nhân sự nào. Hãy nhập thông tin ở trên để bắt đầu!' : 'Không tìm thấy nhân sự phù hợp.'}
+          </div>`;
+        return;
+      }
+
+      const todayISO = getTodayISO();
+
+      container.innerHTML = filtered
+        .map((emp) => {
+          const isSelected = emp.id === selectedEmpId;
+          const todayRec = attendanceMap[`${emp.id}_${todayISO}`];
+          let statusDot = '<span class="w-2 h-2 rounded-full bg-slate-300" title="Chưa chấm công hôm nay"></span>';
+          if (todayRec && todayRec.in1 && todayRec.out1) {
+            statusDot = '<span class="w-2 h-2 rounded-full bg-blue-500" title="Đã hoàn thành hôm nay"></span>';
+          } else if (todayRec && todayRec.in1) {
+            statusDot = '<span class="w-2 h-2 rounded-full bg-emerald-500" title="Đã Check-in"></span>';
+          }
+
+          const subText = emp.title ? `${emp.dept} • ${emp.title}` : emp.dept;
+
+          return `
+            <div onclick="selectEmployee('${emp.id}')" class="w-full text-left px-3 py-2.5 rounded-xl border transition flex items-center justify-between gap-2 cursor-pointer ${
+              isSelected
+                ? 'bg-blue-50 border-blue-400 ring-1 ring-blue-300'
+                : 'bg-white border-slate-200 hover:bg-slate-50'
+            }">
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-2">
+                  <span class="text-[11px] font-mono font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700">${escapeHtml(emp.code)}</span>
+                  <span class="text-xs font-bold text-slate-900 truncate">${escapeHtml(emp.name)}</span>
+                </div>
+                <div class="text-[11px] text-slate-500 truncate mt-0.5">${escapeHtml(subText)}</div>
+              </div>
+              <div class="flex items-center gap-2 flex-shrink-0">
+                ${statusDot}
+                <button type="button" onclick="openDeleteModal(event, '${emp.id}')" class="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition" title="Xóa nhân sự ${escapeHtml(emp.name)}">
+                  <i class="fa-solid fa-trash-can text-xs"></i>
+                </button>
+                ${isSelected ? '<i class="fa-solid fa-circle-check text-blue-600 text-sm"></i>' : '<i class="fa-solid fa-chevron-right text-slate-300 text-xs"></i>'}
+              </div>
+            </div>
+          `;
+        })
+        .join('');
+    };
+
+    // ================= MANAGER TODAY OVERVIEW TABLE =================
+    function renderTodayOverviewTable() {
+      const tbody = document.getElementById('todayOverviewTbody');
+      const statTotal = document.getElementById('statTodayTotal');
+      const statWorking = document.getElementById('statTodayWorking');
+      const statDone = document.getElementById('statTodayDone');
+      const statAbsent = document.getElementById('statTodayAbsent');
+
+      const todayISO = getTodayISO();
+      let workingCount = 0;
+      let doneCount = 0;
+      let absentCount = 0;
+
+      if (employees.length === 0) {
+        statTotal.textContent = 'Tổng: 0';
+        statWorking.textContent = 'Đang làm: 0';
+        statDone.textContent = 'Hoàn thành: 0';
+        statAbsent.textContent = 'Chưa chấm: 0';
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="6" class="py-8 text-center text-slate-400">
+              Chưa có nhân sự nào trong hệ thống. Hãy thêm nhân sự bên trái để bắt đầu.
+            </td>
+          </tr>`;
+        return;
+      }
+
+      tbody.innerHTML = employees
+        .map((emp) => {
+          const rec = attendanceMap[`${emp.id}_${todayISO}`];
+          const inTime = (rec && rec.in1) ? rec.in1 : '--:--';
+          const outTime = (rec && rec.out1) ? rec.out1 : '--:--';
+          const isSelected = emp.id === selectedEmpId;
+
+          let statusHtml = '';
+          if (rec && rec.in1 && rec.out1) {
+            doneCount++;
+            statusHtml = '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200"><i class="fa-solid fa-check-double"></i> Hoàn thành</span>';
+          } else if (rec && rec.in1) {
+            workingCount++;
+            statusHtml = '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200"><i class="fa-solid fa-briefcase"></i> Đang làm</span>';
+          } else {
+            absentCount++;
+            statusHtml = '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200"><i class="fa-regular fa-clock"></i> Chưa chấm</span>';
+          }
+
+          return `
+            <tr onclick="jumpToEmployeeTimesheet('${emp.id}')" class="cursor-pointer transition ${
+              isSelected ? 'bg-blue-50/70' : 'hover:bg-slate-50'
+            }">
+              <td class="py-2.5 px-3">
+                <div class="font-bold text-slate-900">${escapeHtml(emp.name)}</div>
+                <div class="text-[10px] font-mono text-slate-500">${escapeHtml(emp.code)}${emp.title ? ` • ${escapeHtml(emp.title)}` : ''}</div>
+              </td>
+              <td class="py-2.5 px-2.5 text-slate-700">${escapeHtml(emp.dept)}</td>
+              <td class="py-2.5 px-2.5 text-center font-mono font-semibold ${rec && rec.in1 ? 'text-emerald-700' : 'text-slate-400'}">${inTime}</td>
+              <td class="py-2.5 px-2.5 text-center font-mono font-semibold ${rec && rec.out1 ? 'text-orange-600' : 'text-slate-400'}">${outTime}</td>
+              <td class="py-2.5 px-2.5 text-center">${statusHtml}</td>
+              <td class="py-2.5 px-3 text-right">
+                <button type="button" onclick="event.stopPropagation(); jumpToEmployeeTimesheet('${emp.id}')" class="text-[11px] font-semibold text-blue-600 hover:text-blue-800 hover:underline">
+                  Xuất bảng
+                </button>
+              </td>
+            </tr>
+          `;
+        })
+        .join('');
+
+      statTotal.textContent = `Tổng: ${employees.length}`;
+      statWorking.textContent = `Đang làm: ${workingCount}`;
+      statDone.textContent = `Hoàn thành: ${doneCount}`;
+      statAbsent.textContent = `Chưa chấm: ${absentCount}`;
+    }
+
+    // ================= SELECTED EMPLOYEE UI (ADMIN BAR) =================
+    function updateSelectedEmployeeUI() {
+      const emp = employees.find((e) => e.id === selectedEmpId);
+      const avatar = document.getElementById('selectedAvatar');
+      const title = document.getElementById('selectedEmpTitle');
+      const sub = document.getElementById('selectedEmpSub');
+      const btnDeleteSelected = document.getElementById('btnDeleteSelectedEmp');
+
+      if (!emp) {
+        avatar.innerHTML = '<i class="fa-solid fa-user"></i>';
+        title.textContent = 'Chưa chọn nhân sự';
+        sub.textContent = 'Chọn nhân sự từ danh sách phía trên để xem & xuất bảng';
+        btnDeleteSelected.classList.add('hidden');
+        btnDeleteSelected.classList.remove('inline-flex');
+        return;
+      }
+
+      btnDeleteSelected.classList.remove('hidden');
+      btnDeleteSelected.classList.add('inline-flex');
+
+      const initials = emp.name
+        .split(' ')
+        .filter(Boolean)
+        .slice(-2)
+        .map((w) => w[0].toUpperCase())
+        .join('');
+      avatar.textContent = initials || 'NV';
+      title.textContent = emp.name;
+      sub.textContent = `Mã NV: ${emp.code}  •  Phòng ban: ${emp.dept}${emp.title ? `  •  ${emp.title}` : ''}`;
+    }
+
+    // ================= EMPLOYEE CHECK-IN PORTAL (?mode=checkin) =================
+    window.renderEmployeePortalList = function () {
+      const listEl = document.getElementById('empPortalList');
+      const countEl = document.getElementById('empPortalCount');
+      const searchEl = document.getElementById('empPortalSearch');
+      if (!listEl) return;
+
+      const keyword = (searchEl ? searchEl.value : '').trim().toLowerCase();
+      if (countEl) countEl.textContent = `${employees.length} nhân sự`;
+
+      const filtered = employees.filter((e) => {
+        if (!keyword) return true;
+        return (
+          (e.name || '').toLowerCase().includes(keyword) ||
+          (e.dept || '').toLowerCase().includes(keyword) ||
+          (e.code || '').toLowerCase().includes(keyword)
+        );
+      });
+
+      if (filtered.length === 0) {
+        listEl.innerHTML = `
+          <div class="text-center py-6 px-3 text-xs text-slate-400 border border-dashed border-slate-200 rounded-xl">
+            ${employees.length === 0 ? 'Chưa có nhân sự nào được Quản lý tạo trên hệ thống.' : 'Không tìm thấy tên phù hợp.'}
+          </div>`;
+        return;
+      }
+
+      const todayISO = getTodayISO();
+
+      listEl.innerHTML = filtered
+        .map((emp) => {
+          const isSelected = emp.id === selectedEmpId;
+          const rec = attendanceMap[`${emp.id}_${todayISO}`];
+          let badge = '<span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">Chưa chấm</span>';
+          if (rec && rec.in1 && rec.out1) {
+            badge = '<span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">Xong hôm nay</span>';
+          } else if (rec && rec.in1) {
+            badge = `<span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">Vào ${rec.in1}</span>`;
+          }
+
+          return `
+            <button type="button" onclick="selectEmployee('${emp.id}')" class="w-full text-left px-3.5 py-3 rounded-xl border transition flex items-center justify-between gap-2 ${
+              isSelected
+                ? 'bg-blue-50 border-blue-500 ring-1 ring-blue-300 shadow-sm'
+                : 'bg-white border-slate-200 hover:bg-slate-50'
+            }">
+              <div class="min-w-0">
+                <div class="flex items-center gap-2">
+                  <span class="text-[11px] font-mono font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700">${escapeHtml(emp.code)}</span>
+                  <span class="text-sm font-bold text-slate-900 truncate">${escapeHtml(emp.name)}</span>
+                </div>
+                <div class="text-[11px] text-slate-500 truncate mt-0.5">${escapeHtml(emp.dept)}${emp.title ? ` • ${escapeHtml(emp.title)}` : ''}</div>
+              </div>
+              <div class="flex items-center gap-2 flex-shrink-0">
+                ${badge}
+                ${isSelected ? '<i class="fa-solid fa-circle-check text-blue-600 text-base"></i>' : ''}
+              </div>
+            </button>
+          `;
+        })
+        .join('');
+    };
+
+    function setBtnDisabled(btn, label, iconClass) {
+      btn.disabled = true;
+      btn.className =
+        'w-full py-4 px-4 rounded-xl font-bold text-sm transition flex flex-col items-center justify-center gap-1.5 shadow-sm border-2 bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed';
+      btn.querySelector('div').innerHTML = `<i class="fa-solid ${iconClass}"></i><span>${label}</span>`;
+    }
+
+    function updateEmployeePortalUI() {
+      const emp = employees.find((e) => e.id === selectedEmpId);
+      const avatar = document.getElementById('empPortalAvatar');
+      const nameEl = document.getElementById('empPortalSelectedName');
+      const subEl = document.getElementById('empPortalSelectedSub');
+      const statusBadge = document.getElementById('empTodayStatusBadge');
+      const btnIn = document.getElementById('btnCheckIn');
+      const btnInSub = document.getElementById('btnCheckInSub');
+      const btnOut = document.getElementById('btnCheckOut');
+      const btnOutSub = document.getElementById('btnCheckOutSub');
+      const historyBox = document.getElementById('empRecentHistoryBox');
+      const historyList = document.getElementById('empRecentHistoryList');
+
+      if (!btnIn || !btnOut) return;
+
+      if (!emp) {
+        avatar.innerHTML = '<i class="fa-solid fa-user"></i>';
+        nameEl.textContent = 'Vui lòng chọn tên của bạn ở Bước 1';
+        subEl.textContent = 'Mỗi ngày chỉ được Check-in 1 lần và Check-out 1 lần';
+        statusBadge.className = 'px-2.5 py-1 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-600';
+        statusBadge.textContent = 'Chưa chọn nhân sự';
+        setBtnDisabled(btnIn, 'CHECK IN (Vào ca)', 'fa-right-to-bracket');
+        btnInSub.textContent = 'Chọn tên của bạn để bắt đầu';
+        setBtnDisabled(btnOut, 'CHECK OUT (Ra ca)', 'fa-right-from-bracket');
+        btnOutSub.textContent = 'Chọn tên của bạn để bắt đầu';
+        if (historyBox) historyBox.classList.add('hidden');
+        return;
+      }
+
+      const initials = emp.name
+        .split(' ')
+        .filter(Boolean)
+        .slice(-2)
+        .map((w) => w[0].toUpperCase())
+        .join('');
+      avatar.textContent = initials || 'NV';
+      nameEl.textContent = emp.name;
+      subEl.textContent = `Mã NV: ${emp.code} • ${emp.dept}${emp.title ? ` • ${emp.title}` : ''}`;
+
+      const todayISO = getTodayISO();
+      const todayRec = attendanceMap[`${emp.id}_${todayISO}`];
+      const hasIn = Boolean(todayRec && todayRec.in1);
+      const hasOut = Boolean(todayRec && todayRec.out1);
+
+      if (!hasIn) {
+        statusBadge.className = 'px-2.5 py-1 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-800 border border-amber-200';
+        statusBadge.innerHTML = '<i class="fa-regular fa-clock mr-1"></i>Chưa chấm hôm nay';
+      } else if (hasIn && !hasOut) {
+        statusBadge.className = 'px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200';
+        statusBadge.innerHTML = `<i class="fa-solid fa-briefcase mr-1"></i>Đã vào lúc ${todayRec.in1}`;
+      } else {
+        statusBadge.className = 'px-2.5 py-1 rounded-full text-[11px] font-semibold bg-blue-100 text-blue-800 border border-blue-200';
+        statusBadge.innerHTML = '<i class="fa-solid fa-check-double mr-1"></i>Đã hoàn thành hôm nay';
+      }
+
+      // Check-in Button State (STRICT 1x/day)
+      if (!hasIn) {
+        btnIn.disabled = false;
+        btnIn.className =
+          'w-full py-4 px-4 rounded-xl font-bold text-sm transition flex flex-col items-center justify-center gap-1.5 shadow-sm border-2 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white border-emerald-600 cursor-pointer';
+        btnIn.querySelector('div').innerHTML = '<i class="fa-solid fa-right-to-bracket"></i><span>CHECK IN (Vào ca)</span>';
+        btnInSub.textContent = 'Bấm để ghi nhận giờ vào hôm nay';
+      } else {
+        btnIn.disabled = true;
+        btnIn.className =
+          'w-full py-4 px-4 rounded-xl font-bold text-sm transition flex flex-col items-center justify-center gap-1.5 border-2 bg-emerald-50 text-emerald-700 border-emerald-300 cursor-not-allowed';
+        btnIn.querySelector('div').innerHTML = `<i class="fa-solid fa-circle-check text-emerald-600"></i><span>Đã Check-in lúc ${todayRec.in1}</span>`;
+        btnInSub.textContent = 'Đã khóa (chỉ chấm 1 lần/ngày)';
+      }
+
+      // Check-out Button State (STRICT 1x/day)
+      if (hasIn && !hasOut) {
+        btnOut.disabled = false;
+        btnOut.className =
+          'w-full py-4 px-4 rounded-xl font-bold text-sm transition flex flex-col items-center justify-center gap-1.5 shadow-sm border-2 bg-orange-600 hover:bg-orange-700 active:scale-[0.98] text-white border-orange-600 cursor-pointer';
+        btnOut.querySelector('div').innerHTML = '<i class="fa-solid fa-right-from-bracket"></i><span>CHECK OUT (Ra ca)</span>';
+        btnOutSub.textContent = 'Bấm để ghi nhận giờ ra hôm nay';
+      } else if (hasOut) {
+        btnOut.disabled = true;
+        btnOut.className =
+          'w-full py-4 px-4 rounded-xl font-bold text-sm transition flex flex-col items-center justify-center gap-1.5 border-2 bg-orange-50 text-orange-700 border-orange-300 cursor-not-allowed';
+        btnOut.querySelector('div').innerHTML = `<i class="fa-solid fa-circle-check text-orange-600"></i><span>Đã Check-out lúc ${todayRec.out1}</span>`;
+        btnOutSub.textContent = 'Đã khóa (chỉ chấm 1 lần/ngày)';
+      } else {
+        setBtnDisabled(btnOut, 'CHECK OUT (Ra ca)', 'fa-right-from-bracket');
+        btnOutSub.textContent = 'Kích hoạt sau khi đã Check-in';
+      }
+
+      // Lịch sử gần đây của nhân sự này
+      const recentRecords = Object.values(attendanceMap)
+        .filter((r) => r && r.empId === emp.id && (r.in1 || r.out1))
+        .sort((a, b) => String(b.dateISO || '').localeCompare(String(a.dateISO || '')))
+        .slice(0, 7);
+
+      if (recentRecords.length > 0 && historyBox && historyList) {
+        historyBox.classList.remove('hidden');
+        historyList.innerHTML = recentRecords
+          .map((r) => {
+            const parts = String(r.dateISO || '').split('-');
+            const dateLabel = parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : r.dateISO;
+            return `
+              <div class="py-2.5 flex items-center justify-between gap-2">
+                <span class="font-semibold text-slate-700">${dateLabel}</span>
+                <div class="flex items-center gap-3 font-mono">
+                  <span class="text-emerald-700 font-semibold">Vào: ${r.in1 || '--:--'}</span>
+                  <span class="text-orange-600 font-semibold">Ra: ${r.out1 || '--:--'}</span>
+                </div>
+              </div>
+            `;
+          })
+          .join('');
+      } else if (historyBox) {
+        historyBox.classList.add('hidden');
+      }
+    }
+
+    window.performCheckIn = async function () {
+      if (!selectedEmpId || isSubmittingAction) return;
+      const todayISO = getTodayISO();
+      const docKey = `${selectedEmpId}_${todayISO}`;
+      const existing = attendanceMap[docKey];
+
+      if (existing && existing.in1) {
+        showToast('Bạn đã Check-in hôm nay rồi. Mỗi ngày chỉ được Check-in 1 lần.', 'warning');
+        return;
+      }
+
+      isSubmittingAction = true;
+      const timeNow = getCurrentHHMM();
+      const payload = {
+        empId: selectedEmpId,
+        dateISO: todayISO,
+        in1: timeNow,
+        out1: (existing && existing.out1) ? existing.out1 : '',
+        in2: '',
+        out2: '',
+        in3: '',
+        out3: '',
+        updatedAt: new Date().toISOString()
+      };
+
+      try {
+        if (storageMode === 'gsheet') {
+          await gsheetPost('upsertAttendance', { id: docKey, ...payload });
+          attendanceMap[docKey] = { id: docKey, ...payload };
+          syncAllViews();
+        } else if (storageMode === 'firebase' && currentUser && db) {
+          const ref = doc(db, 'artifacts', appId, 'public', 'data', 'attendance', docKey);
+          await setDoc(ref, payload, { merge: true });
+        } else {
+          attendanceMap[docKey] = { id: docKey, ...payload };
+          syncAllViews();
+        }
+        showToast(`Check-in thành công lúc ${timeNow}! Dữ liệu đã gửi về hệ thống Quản lý.`, 'success');
+      } catch (err) {
+        console.error('Check-in error:', err);
+        showToast('Lỗi ghi nhận Check-in. Vui lòng thử lại.', 'error');
+      } finally {
+        isSubmittingAction = false;
+      }
+    };
+
+    window.performCheckOut = async function () {
+      if (!selectedEmpId || isSubmittingAction) return;
+      const todayISO = getTodayISO();
+      const docKey = `${selectedEmpId}_${todayISO}`;
+      const existing = attendanceMap[docKey];
+
+      if (!existing || !existing.in1) {
+        showToast('Vui lòng Check-in trước khi Check-out.', 'warning');
+        return;
+      }
+      if (existing.out1) {
+        showToast('Bạn đã Check-out hôm nay rồi. Mỗi ngày chỉ được Check-out 1 lần.', 'warning');
+        return;
+      }
+
+      isSubmittingAction = true;
+      const timeNow = getCurrentHHMM();
+      const payload = {
+        ...existing,
+        empId: selectedEmpId,
+        dateISO: todayISO,
+        out1: timeNow,
+        updatedAt: new Date().toISOString()
+      };
+
+      try {
+        if (storageMode === 'gsheet') {
+          await gsheetPost('upsertAttendance', { id: docKey, ...payload });
+          attendanceMap[docKey] = { id: docKey, ...payload };
+          syncAllViews();
+        } else if (storageMode === 'firebase' && currentUser && db) {
+          const ref = doc(db, 'artifacts', appId, 'public', 'data', 'attendance', docKey);
+          await setDoc(ref, payload, { merge: true });
+        } else {
+          attendanceMap[docKey] = { id: docKey, ...payload };
+          syncAllViews();
+        }
+        showToast(`Check-out thành công lúc ${timeNow}! Dữ liệu đã gửi về hệ thống Quản lý.`, 'success');
+      } catch (err) {
+        console.error('Check-out error:', err);
+        showToast('Lỗi ghi nhận Check-out. Vui lòng thử lại.', 'error');
+      } finally {
+        isSubmittingAction = false;
+      }
+    };
+
+    // ================= TIMESHEET CALCULATION & RENDERING =================
+    function calculateDayMetrics(rec, dateObj) {
+      if (rec && rec.isSampleExact) {
+        return {
+          in1: rec.in1 || '',
+          out1: rec.out1 || '',
+          in2: rec.in2 || '',
+          out2: rec.out2 || '',
+          in3: rec.in3 || '',
+          out3: rec.out3 || '',
+          tre: Number(rec.tre || 0),
+          som: Number(rec.som || 0),
+          veTre: Number(rec.veTre || 0),
+          gio: Number(rec.gio || 0),
+          cong: Number(rec.cong || 0),
+          tca1: Number(rec.tca1 || 0),
+          tca2: Number(rec.tca2 || 0),
+          kyHieu: rec.kyHieu || 'V'
+        };
+      }
+
+      const in1 = (rec && rec.in1) ? rec.in1 : '';
+      const out1 = (rec && rec.out1) ? rec.out1 : '';
+      const in2 = (rec && rec.in2) ? rec.in2 : '';
+      const out2 = (rec && rec.out2) ? rec.out2 : '';
+      const in3 = (rec && rec.in3) ? rec.in3 : '';
+      const out3 = (rec && rec.out3) ? rec.out3 : '';
+
+      if (!in1 && !out1) {
+        return {
+          in1: '', out1: '', in2: '', out2: '', in3: '', out3: '',
+          tre: 0, som: 0, veTre: 0, gio: 0, cong: 0, tca1: 0, tca2: 0, kyHieu: 'V'
+        };
+      }
+
+      const STANDARD_IN = 8 * 60 + 30;  // 08:30
+      const STANDARD_OUT = 17 * 60 + 30; // 17:30
+
+      const inMin = parseHHMMToMinutes(in1);
+      const outMin = parseHHMMToMinutes(out1);
+
+      let tre = 0;
+      let som = 0;
+      let veTre = 0;
+
+      if (inMin !== null && inMin > STANDARD_IN) {
+        tre = inMin - STANDARD_IN;
+      }
+      if (outMin !== null) {
+        if (outMin < STANDARD_OUT) {
+          som = STANDARD_OUT - outMin;
+        } else if (outMin > STANDARD_OUT) {
+          veTre = outMin - STANDARD_OUT;
+        }
+      }
+
+      const gio = round2(Math.max(0, 8 - (tre + som) / 60));
+      const cong = round2(gio / 8);
+      const tca1 = veTre > 0 ? round2(veTre / 60) : 0;
+      const tca2 = 0;
+      const kyHieu = in1 && out1 ? 'X' : 'O';
+
+      return { in1, out1, in2, out2, in3, out3, tre, som, veTre, gio, cong, tca1, tca2, kyHieu };
+    }
+
+    window.handleMonthChange = function () {
+      const val = document.getElementById('monthSelector').value;
+      if (val) {
+        currentYearMonth = val;
+        renderTimesheet();
+      }
+    };
+
+    function renderTimesheet() {
+      const emp = employees.find((e) => e.id === selectedEmpId);
+      const tbody = document.getElementById('timesheetTbody');
+
+      if (!currentYearMonth) {
+        const vn = getVietnamNow();
+        currentYearMonth = `${vn.getFullYear()}-${pad2(vn.getMonth() + 1)}`;
+        const selector = document.getElementById('monthSelector');
+        if (selector) selector.value = currentYearMonth;
+      }
+
+      const [yearStr, monthStr] = currentYearMonth.split('-');
+      const year = parseInt(yearStr, 10);
+      const month = parseInt(monthStr, 10);
+      const daysInMonth = new Date(year, month, 0).getDate();
+
+      document.getElementById('sheetMonthTitle').textContent = `Tháng ${pad2(month)} / ${year}`;
+      document.getElementById('sheetEmpCode').textContent = emp ? emp.code : '------';
+      document.getElementById('sheetEmpName').textContent = emp ? emp.name : '--------------------';
+      document.getElementById('sheetEmpDept').textContent = emp ? emp.dept : '--------';
+      document.getElementById('sigEmpFullName').textContent = emp ? emp.name : '--------------------';
+      document.getElementById('sigEmpScript').textContent = emp ? emp.name : '';
+
+      let totalGio = 0;
+      let totalCong = 0;
+      let totalTC1 = 0;
+      let totalTC2 = 0;
+      let lateCount = 0;
+      let lateMinutes = 0;
+      let earlyCount = 0;
+      let earlyMinutes = 0;
+      let absentKP = 0;
+      const absentCP = 0;
+
+      const todayISO = getTodayISO();
+      const rowsHtml = [];
+      lastRenderedRows = [];
+
+      for (let d = 1; d <= daysInMonth; d++) {
+        const dateObj = new Date(year, month - 1, d);
+        const dateISO = `${year}-${pad2(month)}-${pad2(d)}`;
+        const thu = getVietnameseWeekdayShort(dateObj);
+        const isSunday = dateObj.getDay() === 0;
+        const rec = emp ? attendanceMap[`${emp.id}_${dateISO}`] : null;
+        const m = calculateDayMetrics(rec, dateObj);
+
+        totalGio += m.gio;
+        totalCong += m.cong;
+        totalTC1 += m.tca1;
+        totalTC2 += m.tca2;
+        if (m.tre > 0) {
+          lateCount++;
+          lateMinutes += m.tre;
+        }
+        if (m.som > 0) {
+          earlyCount++;
+          earlyMinutes += m.som;
+        }
+        if (!isSunday && m.kyHieu === 'V' && dateISO <= todayISO) {
+          absentKP++;
+        }
+
+        const displayDate = formatDisplayDateExcelStyle(year, month, d);
+
+        lastRenderedRows.push({
+          displayDate,
+          thu,
+          isSunday,
+          ...m
+        });
+
+        rowsHtml.push(`
+          <tr class="${isSunday ? 'bg-cyan-exact' : ''}">
+            <td>${displayDate}</td>
+            <td>${thu}</td>
+            <td>${formatTimeDisplay(m.in1)}</td>
+            <td>${formatTimeDisplay(m.out1)}</td>
+            <td>${formatTimeDisplay(m.in2)}</td>
+            <td>${formatTimeDisplay(m.out2)}</td>
+            <td>${formatTimeDisplay(m.in3)}</td>
+            <td>${formatTimeDisplay(m.out3)}</td>
+            <td>${m.tre}</td>
+            <td>${m.som}</td>
+            <td>${m.veTre}</td>
+            <td>${m.gio}</td>
+            <td>${m.cong}</td>
+            <td>${m.tca1}</td>
+            <td>${m.tca2}</td>
+            <td>${m.kyHieu}</td>
+          </tr>
+        `);
+      }
+
+      tbody.innerHTML = rowsHtml.join('');
+
+      lastRenderedSummary = {
+        totalGio: round2(totalGio),
+        totalCong: round2(totalCong),
+        totalTC1: round2(totalTC1),
+        totalTC2: round2(totalTC2),
+        lateCount,
+        lateMinutes,
+        earlyCount,
+        earlyMinutes,
+        absentKP,
+        absentCP
+      };
+
+      document.getElementById('sumTongGio').textContent = lastRenderedSummary.totalGio;
+      document.getElementById('sumTongCong').textContent = lastRenderedSummary.totalCong;
+      document.getElementById('sumTangCa1').textContent = lastRenderedSummary.totalTC1;
+      document.getElementById('sumTangCa2').textContent = lastRenderedSummary.totalTC2;
+      document.getElementById('sumSoLanTre').textContent = lastRenderedSummary.lateCount;
+      document.getElementById('sumSoPhutTre').textContent = lastRenderedSummary.lateMinutes;
+      document.getElementById('sumSoLanSom').textContent = lastRenderedSummary.earlyCount;
+      document.getElementById('sumSoPhutSom').textContent = lastRenderedSummary.earlyMinutes;
+      document.getElementById('sumVangKP').textContent = lastRenderedSummary.absentKP;
+      document.getElementById('sumVangCP').textContent = lastRenderedSummary.absentCP;
+    }
+
+    // ================= SAMPLE DATA LOADER (EXACT CC T10.xlsx) =================
+    window.loadOctoberSampleData = async function () {
+      if (isSubmittingAction) return;
+      isSubmittingAction = true;
+
+      const currentEmp = employees.find((e) => e.id === selectedEmpId);
+      const targetEmpId = currentEmp ? currentEmp.id : 'emp_00007_sample';
+      const createSampleEmp = !currentEmp;
+      const sampleEmp = {
+        code: '00007',
+        name: 'Huỳnh Lê Minh Hảo',
+        dept: '--------',
+        title: '',
+        createdAt: '2026-10-01T00:00:00.000Z'
+      };
+
+      const sampleDays = [
+        { d: 1, in1: '08:16', out1: '', tre: 0, som: 0, veTre: 0, gio: 8, cong: 1, tca1: 0, kh: 'O' },
+        { d: 2, in1: '08:24', out1: '', tre: 0, som: 0, veTre: 0, gio: 8, cong: 1, tca1: 0, kh: 'O' },
+        { d: 3, in1: '', out1: '', tre: 0, som: 0, veTre: 0, gio: 0, cong: 0, tca1: 0, kh: 'V' },
+        { d: 4, in1: '', out1: '', tre: 0, som: 0, veTre: 0, gio: 0, cong: 0, tca1: 0, kh: 'V' },
+        { d: 5, in1: '08:53', out1: '', tre: 24, som: 0, veTre: 0, gio: 7.6, cong: 0.95, tca1: 0, kh: 'O' },
+        { d: 6, in1: '08:18', out1: '', tre: 0, som: 0, veTre: 0, gio: 8, cong: 1, tca1: 0, kh: 'O' },
+        { d: 7, in1: '08:26', out1: '', tre: 0, som: 0, veTre: 0, gio: 8, cong: 1, tca1: 0, kh: 'O' },
+        { d: 8, in1: '08:41', out1: '', tre: 11, som: 0, veTre: 0, gio: 7.82, cong: 0.98, tca1: 0, kh: 'O' },
+        { d: 9, in1: '08:26', out1: '', tre: 0, som: 0, veTre: 0, gio: 8, cong: 1, tca1: 0, kh: 'O' },
+        { d: 10, in1: '08:18', out1: '', tre: 0, som: 0, veTre: 0, gio: 8, cong: 1.23, tca1: 0, kh: 'O' },
+        { d: 11, in1: '', out1: '', tre: 0, som: 0, veTre: 0, gio: 0, cong: 0, tca1: 0, kh: 'V' },
+        { d: 12, in1: '09:16', out1: '', tre: 46, som: 0, veTre: 0, gio: 7.23, cong: 0.9, tca1: 0, kh: 'O' },
+        { d: 13, in1: '08:35', out1: '', tre: 5, som: 0, veTre: 0, gio: 7.92, cong: 0.99, tca1: 0, kh: 'O' },
+        { d: 14, in1: '', out1: '', tre: 0, som: 0, veTre: 0, gio: 0, cong: 0, tca1: 0, kh: 'V' },
+        { d: 15, in1: '08:11', out1: '', tre: 0, som: 0, veTre: 0, gio: 8, cong: 1, tca1: 0, kh: 'O' },
+        { d: 16, in1: '08:10', out1: '', tre: 0, som: 0, veTre: 0, gio: 8, cong: 1, tca1: 0, kh: 'O' },
+        { d: 17, in1: '', out1: '', tre: 0, som: 0, veTre: 0, gio: 0, cong: 0, tca1: 0, kh: 'V' },
+        { d: 18, in1: '', out1: '', tre: 0, som: 0, veTre: 0, gio: 0, cong: 0, tca1: 0, kh: 'V' },
+        { d: 19, in1: '08:33', out1: '', tre: 4, som: 0, veTre: 0, gio: 7.93, cong: 0.99, tca1: 0, kh: 'O' },
+        { d: 20, in1: '08:30', out1: '', tre: 0, som: 0, veTre: 0, gio: 8, cong: 1, tca1: 0, kh: 'O' },
+        { d: 21, in1: '', out1: '', tre: 0, som: 0, veTre: 0, gio: 0, cong: 0, tca1: 0, kh: 'V' },
+        { d: 22, in1: '08:27', out1: '', tre: 0, som: 0, veTre: 0, gio: 8, cong: 1, tca1: 0, kh: 'O' },
+        { d: 23, in1: '08:16', out1: '', tre: 0, som: 0, veTre: 0, gio: 8, cong: 1, tca1: 0, kh: 'O' },
+        { d: 24, in1: '08:06', out1: '', tre: 0, som: 0, veTre: 0, gio: 8, cong: 1.23, tca1: 0, kh: 'O' },
+        { d: 25, in1: '', out1: '', tre: 0, som: 0, veTre: 0, gio: 0, cong: 0, tca1: 0, kh: 'V' },
+        { d: 26, in1: '09:01', out1: '', tre: 32, som: 0, veTre: 0, gio: 7.47, cong: 0.93, tca1: 0, kh: 'O' },
+        { d: 27, in1: '08:06', out1: '', tre: 0, som: 0, veTre: 0, gio: 8, cong: 1, tca1: 0, kh: 'O' },
+        { d: 28, in1: '08:13', out1: '18:28', tre: 0, som: 0, veTre: 59, gio: 8, cong: 1, tca1: 0.98, kh: 'X' },
+        { d: 29, in1: '08:36', out1: '', tre: 7, som: 0, veTre: 0, gio: 7.88, cong: 0.98, tca1: 0, kh: 'O' },
+        { d: 30, in1: '08:31', out1: '', tre: 2, som: 0, veTre: 0, gio: 7.97, cong: 1, tca1: 0, kh: 'O' },
+        { d: 31, in1: '08:32', out1: '', tre: 3, som: 0, veTre: 0, gio: 7.95, cong: 1.22, tca1: 0, kh: 'O' }
+      ];
+
+      try {
+        if (storageMode === 'gsheet') {
+          const records = sampleDays.map((item) => {
+            const dateISO = `2026-10-${pad2(item.d)}`;
+            const attId = `${targetEmpId}_${dateISO}`;
+            return {
+              id: attId,
+              empId: targetEmpId,
+              dateISO,
+              in1: item.in1,
+              out1: item.out1,
+              in2: '',
+              out2: '',
+              in3: '',
+              out3: '',
+              tre: item.tre,
+              som: item.som,
+              veTre: item.veTre,
+              gio: item.gio,
+              cong: item.cong,
+              tca1: item.tca1,
+              tca2: 0,
+              kyHieu: item.kh,
+              isSampleExact: true,
+              updatedAt: new Date().toISOString()
+            };
+          });
+          await gsheetPost('batchSample', {
+            employee: createSampleEmp ? { id: targetEmpId, ...sampleEmp } : null,
+            records
+          });
+          if (createSampleEmp && !employees.find((e) => e.id === targetEmpId)) {
+            employees.push({ id: targetEmpId, ...sampleEmp });
+          }
+          records.forEach((r) => {
+            attendanceMap[r.id] = r;
+          });
+        } else if (storageMode === 'firebase' && currentUser && db) {
+          const batch = writeBatch(db);
+          if (createSampleEmp) {
+            const empRef = doc(db, 'artifacts', appId, 'public', 'data', 'employees', targetEmpId);
+            batch.set(empRef, sampleEmp);
+          }
+
+          sampleDays.forEach((item) => {
+            const dateISO = `2026-10-${pad2(item.d)}`;
+            const attId = `${targetEmpId}_${dateISO}`;
+            const attRef = doc(db, 'artifacts', appId, 'public', 'data', 'attendance', attId);
+            batch.set(attRef, {
+              empId: targetEmpId,
+              dateISO,
+              in1: item.in1,
+              out1: item.out1,
+              in2: '',
+              out2: '',
+              in3: '',
+              out3: '',
+              tre: item.tre,
+              som: item.som,
+              veTre: item.veTre,
+              gio: item.gio,
+              cong: item.cong,
+              tca1: item.tca1,
+              tca2: 0,
+              kyHieu: item.kh,
+              isSampleExact: true
+            });
+          });
+          await batch.commit();
+        } else {
+          if (createSampleEmp && !employees.find((e) => e.id === targetEmpId)) {
+            employees.push({ id: targetEmpId, ...sampleEmp });
+          }
+          sampleDays.forEach((item) => {
+            const dateISO = `2026-10-${pad2(item.d)}`;
+            const attId = `${targetEmpId}_${dateISO}`;
+            attendanceMap[attId] = {
+              id: attId,
+              empId: targetEmpId,
+              dateISO,
+              in1: item.in1,
+              out1: item.out1,
+              tre: item.tre,
+              som: item.som,
+              veTre: item.veTre,
+              gio: item.gio,
+              cong: item.cong,
+              tca1: item.tca1,
+              tca2: 0,
+              kyHieu: item.kh,
+              isSampleExact: true
+            };
+          });
+        }
+
+        selectedEmpId = targetEmpId;
+        currentYearMonth = '2026-10';
+        document.getElementById('monthSelector').value = '2026-10';
+        syncAllViews();
+        showToast(`Đã nạp dữ liệu mẫu tháng 10/2026 cho ${currentEmp ? currentEmp.name : sampleEmp.name}!`, 'success');
+      } catch (err) {
+        console.error('Sample data error:', err);
+        showToast('Không thể nạp dữ liệu mẫu. Vui lòng thử lại.', 'error');
+      } finally {
+        isSubmittingAction = false;
+      }
+    };
+
+    // ================= SIGNATURE PAD (MOUSE + TOUCH) =================
+    let isDrawing = false;
+    let sigCtx = null;
+    let sigCanvas = null;
+
+    function initSignaturePad() {
+      sigCanvas = document.getElementById('managerSignatureCanvas');
+      if (!sigCanvas) return;
+      sigCtx = sigCanvas.getContext('2d');
+
+      function resizeCanvas() {
+        const rect = sigCanvas.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) return;
+        const dpr = window.devicePixelRatio || 1;
+        const prevData = sigCanvas.width > 0 && sigCanvas.height > 0 ? sigCanvas.toDataURL() : null;
+        sigCanvas.width = Math.floor(rect.width * dpr);
+        sigCanvas.height = Math.floor(rect.height * dpr);
+        sigCtx.scale(dpr, dpr);
+        sigCtx.strokeStyle = '#0f172a';
+        sigCtx.lineWidth = 2;
+        sigCtx.lineCap = 'round';
+        sigCtx.lineJoin = 'round';
+
+        if (prevData && document.getElementById('sigPlaceholder').classList.contains('hidden')) {
+          const img = new Image();
+          img.onload = () => {
+            sigCtx.drawImage(img, 0, 0, rect.width, rect.height);
+          };
+          img.src = prevData;
+        }
+      }
+
+      resizeCanvas();
+      window.addEventListener('resize', resizeCanvas);
+
+      function getPos(e) {
+        const rect = sigCanvas.getBoundingClientRect();
+        const clientX = e.touches && e.touches.length ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches && e.touches.length ? e.touches[0].clientY : e.clientY;
+        return { x: clientX - rect.left, y: clientY - rect.top };
+      }
+
+      function startDraw(e) {
+        e.preventDefault();
+        isDrawing = true;
+        const pos = getPos(e);
+        sigCtx.beginPath();
+        sigCtx.moveTo(pos.x, pos.y);
+        const placeholder = document.getElementById('sigPlaceholder');
+        if (placeholder) placeholder.classList.add('hidden');
+      }
+
+      function moveDraw(e) {
+        if (!isDrawing) return;
+        e.preventDefault();
+        const pos = getPos(e);
+        sigCtx.lineTo(pos.x, pos.y);
+        sigCtx.stroke();
+      }
+
+      function endDraw() {
+        if (!isDrawing) return;
+        isDrawing = false;
+        sigCtx.closePath();
+      }
+
+      sigCanvas.addEventListener('mousedown', startDraw);
+      sigCanvas.addEventListener('mousemove', moveDraw);
+      window.addEventListener('mouseup', endDraw);
+
+      sigCanvas.addEventListener('touchstart', startDraw, { passive: false });
+      sigCanvas.addEventListener('touchmove', moveDraw, { passive: false });
+      window.addEventListener('touchend', endDraw);
+    }
+
+    window.clearSignaturePad = function () {
+      if (!sigCanvas || !sigCtx) return;
+      sigCtx.clearRect(0, 0, sigCanvas.width, sigCanvas.height);
+      const placeholder = document.getElementById('sigPlaceholder');
+      if (placeholder) placeholder.classList.remove('hidden');
+    };
+
+    // ================= EXPORT PDF, PRINT & EXCEL =================
+    window.printTimesheet = function () {
+      window.print();
+    };
+
+    window.downloadPDF = async function () {
+      const emp = employees.find((e) => e.id === selectedEmpId);
+      const element = document.getElementById('printableArea');
+      const btn = document.getElementById('btnDownloadPdf');
+
+      if (!element || typeof html2pdf === 'undefined') {
+        showToast('Đang mở hộp thoại in PDF của trình duyệt...', 'info');
+        window.print();
+        return;
+      }
+
+      const fileName = `BangChamCong_${emp ? emp.code : 'iDOCTOR'}_${currentYearMonth || 'export'}.pdf`;
+      const originalHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i><span>Đang tạo PDF...</span>';
+
+      // Tạm ẩn các phần tử no-print bên trong printableArea
+      const hiddenNodes = element.querySelectorAll('.no-print');
+      hiddenNodes.forEach((n) => (n.style.display = 'none'));
+
+      try {
+        const opt = {
+          margin: [6, 6, 6, 6],
+          filename: fileName,
+          image: { type: 'jpeg', quality: 0.98 },
+          html2canvas: { scale: 2, useCORS: true, logging: false },
+          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        };
+        await html2pdf().set(opt).from(element).save();
+        showToast(`Đã xuất file ${fileName} thành công!`, 'success');
+      } catch (err) {
+        console.error('PDF export error:', err);
+        showToast('Không thể tạo PDF trực tiếp. Hãy dùng nút In bảng (A4) -> Lưu dưới dạng PDF.', 'warning');
+      } finally {
+        hiddenNodes.forEach((n) => (n.style.display = ''));
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+      }
+    };
+
+    window.exportToExcel = function () {
+      if (typeof XLSX === 'undefined') {
+        showToast('Thư viện xuất Excel chưa sẵn sàng. Vui lòng thử lại.', 'error');
+        return;
+      }
+
+      const emp = employees.find((e) => e.id === selectedEmpId);
+      const sum = lastRenderedSummary || {
+        totalGio: 0, totalCong: 0, totalTC1: 0, totalTC2: 0,
+        lateCount: 0, lateMinutes: 0, earlyCount: 0, earlyMinutes: 0,
+        absentKP: 0, absentCP: 0
+      };
+
+      const empLine = `Mã nhân viên: ${emp ? emp.code : '------'}         Tên nhân viên: ${emp ? emp.name : '--------'}         Phòng ban: ${emp ? emp.dept : '--------'}`;
+      const managerName = (document.getElementById('managerNameInput').value || '').trim();
+      const signDate = (document.getElementById('managerSignDate').value || '').trim();
+
+      const aoa = [
+        ['BẢNG CHI TIẾT CHẤM CÔNG'],
+        [empLine],
+        ['Tổng giờ', null, sum.totalGio, null, null, 'Số lần trễ', null, sum.lateCount, null, 'Số phút trễ', null, sum.lateMinutes, null, 'Tăng ca ngày lễ', null, null],
+        ['Tổng công', null, sum.totalCong, null, null, 'Số lần sớm', null, sum.earlyCount, null, 'Số phút sớm', null, sum.earlyMinutes, null, null, null, null],
+        ['Tăng ca', null, sum.totalTC1, sum.totalTC2, null, 'Vắng KP', null, sum.absentKP, null, 'Vắng CP', null, sum.absentCP, null, null, null, null],
+        ['Chi tiết'],
+        ['Ngày', 'Thứ', 1, null, 2, null, 3, null, 'Trễ', 'Sớm', 'Về trễ', 'Giờ', 'Công', 'T.Ca1', 'T.Ca2', 'Ký hiệu'],
+        [null, null, 'Vào', 'Ra', 'Vào', 'Ra', 'Vào', 'Ra', null, null, null, null, null, null, null, null]
+      ];
+
+      lastRenderedRows.forEach((r) => {
+        aoa.push([
+          r.displayDate,
+          r.thu,
+          formatTimeDisplay(r.in1) || null,
+          formatTimeDisplay(r.out1) || null,
+          formatTimeDisplay(r.in2) || null,
+          formatTimeDisplay(r.out2) || null,
+          formatTimeDisplay(r.in3) || null,
+          formatTimeDisplay(r.out3) || null,
+          r.tre,
+          r.som,
+          r.veTre,
+          r.gio,
+          r.cong,
+          r.tca1,
+          r.tca2,
+          r.kyHieu
+        ]);
+      });
+
+      aoa.push([]);
+      aoa.push([null, 'Nhân sự xác nhận', null, null, null, null, null, null, null, null, `Ngày ký: ${signDate || '..../..../......'}`]);
+      aoa.push([null, '(Ký, ghi rõ họ tên)', null, null, null, null, null, null, null, null, 'Trưởng bộ phận ký duyệt']);
+      aoa.push([]);
+      aoa.push([]);
+      aoa.push([null, emp ? emp.name : '', null, null, null, null, null, null, null, null, managerName || '(Ký, ghi rõ họ tên)']);
+
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      ws['!merges'] = [
+        { s: { r: 0, c: 0 }, e: { r: 0, c: 15 } },
+        { s: { r: 1, c: 0 }, e: { r: 1, c: 15 } },
+        { s: { r: 2, c: 0 }, e: { r: 2, c: 1 } },
+        { s: { r: 2, c: 2 }, e: { r: 2, c: 3 } },
+        { s: { r: 2, c: 5 }, e: { r: 2, c: 6 } },
+        { s: { r: 2, c: 9 }, e: { r: 2, c: 10 } },
+        { s: { r: 2, c: 13 }, e: { r: 2, c: 14 } },
+        { s: { r: 3, c: 0 }, e: { r: 3, c: 1 } },
+        { s: { r: 3, c: 2 }, e: { r: 3, c: 3 } },
+        { s: { r: 3, c: 5 }, e: { r: 3, c: 6 } },
+        { s: { r: 3, c: 9 }, e: { r: 3, c: 10 } },
+        { s: { r: 4, c: 0 }, e: { r: 4, c: 1 } },
+        { s: { r: 4, c: 5 }, e: { r: 4, c: 6 } },
+        { s: { r: 4, c: 9 }, e: { r: 4, c: 10 } },
+        { s: { r: 5, c: 0 }, e: { r: 5, c: 15 } },
+        { s: { r: 6, c: 0 }, e: { r: 7, c: 0 } },
+        { s: { r: 6, c: 1 }, e: { r: 7, c: 1 } },
+        { s: { r: 6, c: 2 }, e: { r: 6, c: 3 } },
+        { s: { r: 6, c: 4 }, e: { r: 6, c: 5 } },
+        { s: { r: 6, c: 6 }, e: { r: 6, c: 7 } },
+        { s: { r: 6, c: 8 }, e: { r: 7, c: 8 } },
+        { s: { r: 6, c: 9 }, e: { r: 7, c: 9 } },
+        { s: { r: 6, c: 10 }, e: { r: 7, c: 10 } },
+        { s: { r: 6, c: 11 }, e: { r: 7, c: 11 } },
+        { s: { r: 6, c: 12 }, e: { r: 7, c: 12 } },
+        { s: { r: 6, c: 13 }, e: { r: 7, c: 13 } },
+        { s: { r: 6, c: 14 }, e: { r: 7, c: 14 } },
+        { s: { r: 6, c: 15 }, e: { r: 7, c: 15 } }
+      ];
+
+      ws['!cols'] = [
+        { wch: 12 }, { wch: 6 }, { wch: 8 }, { wch: 8 }, { wch: 7 }, { wch: 7 },
+        { wch: 7 }, { wch: 7 }, { wch: 7 }, { wch: 7 }, { wch: 8 }, { wch: 7 },
+        { wch: 7 }, { wch: 7 }, { wch: 7 }, { wch: 9 }
+      ];
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'ChamCong');
+      const fileName = `CC_${emp ? emp.code : 'iDOCTOR'}_${currentYearMonth || 'export'}.xlsx`;
+      XLSX.writeFile(wb, fileName);
+      showToast(`Đã xuất file Excel ${fileName} thành công!`, 'success');
+    };
+
+    // ================= BOOTSTRAP =================
+    window.addEventListener('DOMContentLoaded', () => {
+      const vn = getVietnamNow();
+      currentYearMonth = `${vn.getFullYear()}-${pad2(vn.getMonth() + 1)}`;
+      document.getElementById('monthSelector').value = currentYearMonth;
+      document.getElementById('managerSignDate').value = getTodayISO();
+
+      updateShareLinkBanner();
+
+      const initialMode = detectUrlMode();
+      applyViewMode(initialMode);
+
+      startLiveClock();
+      initSignaturePad();
+      initStorage();
+    });
+  </script>
+</body>
+</html>
